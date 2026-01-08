@@ -1,0 +1,318 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="tcdx.uap.mapper.SystemMapper">
+
+    <select id="selectSysMenu" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT *
+            FROM v_menu
+            <where>
+                <if test="user==null or user.user_id!=879">
+                id in (select id from v_menu where sas_system_id=#{sas_system_id})
+                </if>
+               <if test="user!=null and user.user_id==879 and sas_system_id!=null">
+                   id in (select id from v_menu where sas_system_id=#{sas_system_id})
+                    or id in (3,7)---系统管理、业务管理
+               </if>
+            </where>
+            UNION
+            SELECT e.*
+            FROM v_menu e
+                     INNER JOIN rec_table s ON s.id = e.parent_id
+        )
+        SELECT a.*
+        FROM rec_table a where is_deleted = false
+        order by ord
+    </select>
+
+    <select id="selectSysUser" resultType="java.util.Map">
+        SELECT t.*
+        FROM v_user t
+        where t.is_deleted=false
+        <if test="staff_nm!=null and staff_nm!=''">
+            and t.staff_nm like '%'||#{staff_nm}||'%'
+        </if>
+        <if test="search_group_id!=-1 and search_in_group==true">
+            and t.id in (
+                select user_id from v_user_group where group_id=#{search_group_id}
+            )
+        </if>
+        <if test="search_group_id==-1 and search_in_group==true">
+            and t.id not in (
+                select user_id from v_user_group where user_id is not null
+            )
+        </if>
+        order by t.belong_group_id,t.ord
+    </select>
+
+    <select id="get_user_groups" resultType="java.util.Map">
+        select a.user_id,a.group_id,b.name group_name,b.sas_system_id,u.belong_group_id
+        ,row_number() over (partition by a.user_id order by case when a.group_id=u.belong_group_id then -1 else b.ord end) rn
+        from v_user_group a
+        join v_user u on a.user_id=u.id
+        join v_group b on a.group_id=b.id
+        where a.user_id in
+        <foreach collection="user_ids" open="(" close=")" item="user_id" separator=",">#{user_id}</foreach>
+    </select>
+
+
+    <select id="get_sas_system_groups" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT *
+            FROM v_group WHERE id in (select id from v_group where sas_system_id=#{sas_system_id})
+            UNION
+            SELECT e.*
+            FROM v_group e
+                     INNER JOIN rec_table s ON s.id = e.parent_id
+        )
+        SELECT a.*
+        FROM rec_table a where is_deleted = false
+        order by ord
+    </select>
+
+
+    <select id="selectSysUserByUsername" resultType="java.util.Map">
+        SELECT t.*
+        FROM v_user t
+        WHERE t.staff_no = #{username}
+        order by t.id
+    </select>
+
+    <select id="selectSysFirstUserByUsername" resultType="java.util.Map">
+        SELECT t.*
+        FROM v_user t
+        WHERE t.staff_no = #{username}
+        order by t.id
+        limit 1
+    </select>
+
+    <select id="selectUserById" resultType="java.util.Map">
+        SELECT t.*
+        FROM v_user t
+        WHERE t.id = #{id}
+    </select>
+
+    <update id="updateUserPasswordByUserId">
+        update v_user set psw = #{password}
+        where id = #{userId}
+    </update>
+
+    <update id="updateUserPasswordByUsername">
+        update v_user set psw = #{password}
+        where staff_no = #{username}
+    </update>
+
+    <select id="selectScopedUsers" resultType="java.util.Map">
+    with tbl as (
+        select a.*,u.staff_nm,
+        row_number() over (PARTITION by a.user_id order by (case when u.belong_group_id=a.group_id then 1 else 0 end) desc) rn
+        from (
+            select '角色人员' tp,b.user_id,g.group_id
+            from v_user_role b
+            join v_user_group g on b.user_id=g.user_id
+            where b.role_id in
+            <foreach collection="roles" item="id" open="(" close=")" separator=",">#{id}</foreach>
+            union
+            select '角色组织人员',c.user_id,b.group_id
+            from v_group_role b
+            join v_user_group c on b.group_id=c.group_id
+            where b.group_id in
+            <foreach collection="roles" item="id" open="(" close=")" separator=",">#{id}</foreach>
+        ) a
+        join v_user u on a.user_id=u.id
+        where a.group_id in
+        <foreach collection="groups" item="id" open="(" close=")" separator=",">#{id}</foreach>
+    )
+    select * from tbl t where t.rn=1
+    </select>
+
+    <!-- 新增：执行自定义 SQL（仅 SELECT） -->
+    <select id="runUserDefinedSql" parameterType="map" resultType="java.util.Map">
+        <!--
+          注意：
+          1) 这里使用 ${sql} 直接拼接自定义 SQL 文本；其余 #{...} 参数可在 sql_str 中引用。
+             例如你提供的 sql_str 里用了 #{user_id}，上面 Java 已放入 params。
+          2) 强烈建议在 Java 侧校验 sql_str 仅以 "select" 开头，避免注入风险。
+        -->
+        ${sql}
+    </select>
+
+    <!--查询用户数据-->
+    <select id="selectUserByIds" resultType="java.util.Map">
+        select t.*
+        from (
+        select a.id,a.staff_nm,a.staff_nm name,a.is_working,b.group_id,c.name group_name,b.post_id,d.name
+        post_name,d.manage_this_level,c.ord*10000+a.ord ord
+        ,a.belong_group_id
+        ,row_number() over (partition by a.id order by abs(a.belong_group_id-b.group_id) asc) rn
+        from v_user a
+        join v_user_group b on a.id=b.user_id
+        join v_group c on b.group_id=c.id
+        join v_post d on b.post_id=d.id
+        where a.is_working=true
+        and a.id in
+        <foreach collection="ids" item="id" open="(" close=")" separator=",">
+            #{id}
+        </foreach>
+        ) t where t.rn=1
+        order by t.ord
+    </select>
+
+    <select id="selectUpperGroups" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+        SELECT id,parent_id,name FROM v_group
+        WHERE id in
+        <foreach collection="groupIds" item="item" open="(" close=")" separator=",">
+            #{item}
+        </foreach>
+        UNION
+        SELECT e.id,e.parent_id,e.name
+        FROM v_group e
+        INNER JOIN rec_table s ON s.parent_id = e.id
+        )
+        SELECT * FROM rec_table
+    </select>
+
+    <select id="selectUserRoles" resultType="java.util.Map">
+        select a.id,a.user_id,a.role_id,b.name role_name
+        from v_user_role a
+        join v_role b on a.role_id=b.id
+        where a.user_id in
+        <foreach collection="userIds" item="id" open="(" close=")" separator=",">
+            #{id}
+        </foreach>
+    </select>
+
+    <select id="selectExec" resultType="java.util.Map">
+        SELECT a.name,b.id FROM v_exec_obj a
+                          LEFT JOIN  v_exec_op b ON a.id=b.exec_id
+        WHERE  b.view_id=#{view_id}
+    </select>
+
+    <select id="getUserScopeGroup" resultType="java.util.Map">
+        select sg.scope_id,s.obj_id,s.obj_type,g.*
+        from v_user_group g
+                 join v_user_scope_group sg on g.group_id=sg.group_id
+                 join v_user_scope s on sg.scope_id=s.id
+        where g.user_id=#{user_id} and s.obj_type!='edge-assign-scope'
+    </select>
+
+    <select id="getUserScopeRolePost" resultType="java.util.Map">
+        select sr.scope_id,s.obj_id,s.obj_type
+        from v_user_role r
+                 join v_user_scope_role sr on r.role_id=sr.role_id
+                 join v_user_scope s on sr.scope_id=s.id
+        where r.user_id=#{user_id} and s.obj_type!='edge-assign-scope'
+        union
+        select sp.scope_id,s.obj_id,s.obj_type
+        from v_user_group g
+                 join v_user_scope_post sp on g.post_id=sp.post_id
+                 join v_user_scope s on sp.scope_id=s.id
+        where g.user_id=#{user_id} and s.obj_type!='edge-assign-scope'
+    </select>
+
+    <select id="get_recursive_roles" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT id, parent_id,name,ord,group_attr FROM v_role
+            where
+                id in (-1<foreach collection="ids" item="id">,#{id}</foreach>)
+            UNION
+            SELECT e.id, e.parent_id, e.name,e.ord, e.group_attr
+            FROM v_role e
+                     INNER JOIN rec_table s ON e.parent_id = s.id
+        )
+        SELECT a.*
+        FROM  rec_table a
+        order by a.ord
+
+
+    </select>
+
+    <select id="get_role_by_group_attr" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT id, parent_id,name,ord,group_attr FROM v_role
+            where
+                id in (select id from v_role where sas_system_id=#{sas_system_id})
+            UNION
+            SELECT e.id, e.parent_id, e.name,e.ord, e.group_attr
+            FROM v_role e
+                     INNER JOIN rec_table s ON e.parent_id = s.id
+        )
+        SELECT a.*
+        FROM  rec_table a
+        where group_attr is not null and group_attr like 'user_%'
+        order by a.ord
+    </select>
+
+    <update id="set_group_chd_role" parameterType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT id,parent_id,name FROM v_group
+            WHERE parent_id=#{parent_id}
+            UNION
+            SELECT e.id,e.parent_id,e.name
+            FROM v_group e
+                     INNER JOIN rec_table s ON s.id = e.parent_id
+        )
+        <if test="state==true">
+        insert into v_group_role (group_id,role_id) select id,#{role_id} from rec_table where id!=#{parent_id}
+        </if>
+        <if test="state==false">
+        delete from v_group_role t where (t.group_id,t.role_id) in (select id,#{role_id} from rec_table where id!=#{parent_id} )
+        </if>
+    </update>
+
+    <select id="get_user_roles" resultType="java.util.Map">
+        with RECURSIVE rec_table AS (
+            --用户角色与用户组的角色
+            SELECT * FROM v_role WHERE (is_deleted is null or is_deleted=false) and id in (
+                select ur.role_id from v_user_role ur
+                where ur.user_id=#{user_id}
+                union
+                select gr.role_id
+                from v_user_group ug
+                         join v_group_role gr on ug.group_id=gr.group_id
+                where ug.user_id=#{user_id}
+            )
+            UNION
+            SELECT e.* FROM rec_table s
+                                INNER JOIN v_role e ON e.parent_id = s.id and (e.is_deleted is null or e.is_deleted=false)
+        )
+        --用户角色与用户组的角色以及下属嵌套角色关系
+        SELECT a.id role_id, a.name,'用户与用户组角色' type
+        FROM rec_table a
+        where a.is_deleted = false
+        union
+        --继承角色
+        SELECT b.id role_id,b.name,'用户继承角色（不嵌套）' type
+        FROM rec_table a
+                 join v_role b on a.inherit_role_id=b.id and (b.is_deleted=false or b.is_deleted is null)
+    </select>
+
+    <select id="get_user_sas_system" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT *
+            FROM v_group
+            where id in (-1,
+                    <foreach collection="group_ids" item="id" separator=",">#{id}</foreach>
+                    )
+            UNION
+            SELECT
+                e.*
+            FROM v_group e
+                     INNER JOIN rec_table s ON s.parent_id = e.id
+        )
+        SELECT b.*
+        FROM rec_table a
+                 join v_sys_param b on a.sas_system_id=b.id
+        order by ord
+    </select>
+
+    <update id="insert_role_perm" parameterType="java.util.Map">
+        <foreach collection="obj_ids" item="id">
+            insert into v_role_perm_obj (role_id,obj_id,obj_type) values (#{role_id}, #{id}, #{obj_type});
+        </foreach>
+    </update>
+
+</mapper>

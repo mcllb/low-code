@@ -1,0 +1,661 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="tcdx.uap.mapper.BaseDBMapper">
+    <sql id="selColumns">
+        <if test="selectCols!=null and selectCols.size>0 ">
+            <foreach collection="selectCols" item="selectCol" open="" close="" separator=",">
+                ${selectCol}
+            </foreach>
+        </if>
+        <if test="selectCols==null or selectCols.size==0"> * </if>
+    </sql>
+
+    <select id="selectById" resultType="java.util.Map">
+        select <include refid="tcdx.uap.mapper.BaseDBMapper.selColumns" />
+        from ${tn} where id=#{id}
+    </select>
+
+    <select id="selectIn" resultType="java.util.Map">
+        select
+        <if test="distinct!=null and distinct=='true'">
+            distinct
+        </if>
+            <include refid="tcdx.uap.mapper.BaseDBMapper.selColumns" />
+        from ${tn} where ${columnName} in
+        <foreach collection="vals" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+        <if test='sortMap!=null and sortMap.size>0'>
+            order by
+            <foreach collection="sortMap" index="sortColumn" item="ascending" open="" close="" separator=",">
+                ${sortColumn} ${ascending}
+            </foreach>
+        </if>
+    </select>
+
+    <select id="selectEq" resultType="java.util.Map">
+        select <include refid="tcdx.uap.mapper.BaseDBMapper.selColumns" />
+        from ${tn} where
+        <foreach collection="equalMap" index="key" item="val" open="(" close=")" separator="and">
+            ${key}=#{val}
+        </foreach>
+        <if test='sortMap!=null and sortMap.size>0'>
+            order by
+            <foreach collection="sortMap" index="sortColumn" item="ascending" open="" close="" separator=",">
+                ${sortColumn} ${ascending}
+            </foreach>
+        </if>
+    </select>
+
+
+    <select id="selectEqAndIn" resultType="java.util.Map">
+        select
+        <if test="distinct!=null and distinct=='true'">
+            distinct
+        </if>
+        <include refid="tcdx.uap.mapper.BaseDBMapper.selColumns" />
+        from ${tn} where ${columnName} in
+        <foreach collection="vals" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+        and
+        <foreach collection="equalMap" index="key" item="val" open="(" close=")" separator="and">
+            ${key}=#{val}
+        </foreach>
+        <if test='sortMap!=null and sortMap.size>0'>
+            order by
+            <foreach collection="sortMap" index="sortColumn" item="ascending" open="" close="" separator=",">
+                ${sortColumn} ${ascending}
+            </foreach>
+        </if>
+    </select>
+
+    <!--
+    [
+        {
+            tp:'a',
+            cas:[]
+        },
+        {
+            tp:'o',
+            cas:[
+                {
+                    tp:'lk',
+                    col:'',
+                    val:''
+                }
+            ]
+        }
+    ]
+    -->
+
+    <sql id="whereCause1">
+        <if test='obj_c1!=null and obj_c1.size>0'>
+            <!-- and -->
+            <if test='obj_c1.tp=="a"'>
+                <foreach collection="obj_c1.cas" item="andObj_c1" open="" close="" separator="and">
+                    <if test='andObj_c1.tp=="lk"'>
+                        ${alias?prefix:""}${andObj_c1.col} like '%'||#{andObj_c1.val}||'%'
+                    </if>
+                    <if test='andObj_c1.tp=="nlk"'>
+                        ${andObj_c1.col} not like '%'||#{andObj_c1.val}||'%'
+                    </if>
+                    <if test='andObj_c1.tp=="eq"'>
+                        ${andObj_c1.col}=#{andObj_c1.val}
+                    </if>
+                    <if test='andObj_c1.tp=="neq"'>
+                        ${andObj_c1.col}!=#{andObj_c1.val}
+                    </if>
+                    <if test='andObj_c1.tp=="isnot"'>
+                        ${andObj_c1.col} is not ${andObj_c1.val}
+                    </if>
+                    <if test='andObj_c1.tp=="is"'>
+                        ${andObj_c1.col} is ${andObj_c1.val}
+                    </if>
+                    <if test="andObj_c1.tp == 'gt'">
+                        ${andObj_c1.col} <![CDATA[>]]> #{andObj_c1.val}
+                    </if>
+                    <if test="andObj_c1.tp == 'gte'">
+                        ${andObj_c1.col} <![CDATA[>=]]> #{andObj_c1.val}
+                    </if>
+                    <if test="andObj_c1.tp == 'lt'">
+                        ${andObj_c1.col} <![CDATA[<]]> #{andObj_c1.val}
+                    </if>
+                    <if test="andObj_c1.tp == 'lte'">
+                        ${andObj_c1.col} <![CDATA[<=]]> #{andObj_c1.val}
+                    </if>
+                    <if test='andObj_c1.tp=="in"'>
+                        ${andObj_c1.col} in
+                        <foreach collection="andObj_c1.vals" item="value" open="(" close=")" separator=",">
+                            #{value}
+                        </foreach>
+                    </if>
+                    <if test='andObj_c1.tp=="notin" and andObj_c1.vals.size>0'>
+                        ${andObj_c1.col} not in
+                        <foreach collection="andObj_c1.vals" item="value" open="(" close=")" separator=",">
+                            #{value}
+                        </foreach>
+                    </if>
+                    <if test='andObj_c1.tp=="notnull"'>
+                        ${andObj_c1.col} is not null
+                    </if>
+                    <if test='andObj_c1.tp=="isnull"'>
+                        ${andObj_c1.col} is null
+                    </if>
+                </foreach>
+            </if>
+            <!-- or -->
+            <if test='obj_c1.tp=="o"'>
+                <foreach collection="obj_c1.cas" item="orObj_c1" open="" close="" separator="or">
+                    <if test='orObj_c1.tp=="lk"'>
+                        lower(${orObj_c1.col}) like '%'||lower(#{orObj_c1.val})||'%'
+                    </if>
+                    <if test='orObj_c1.tp=="nlk"'>
+                        lower(${orObj_c1.col}) not like '%'||lower(#{orObj_c1.val})||'%'
+                    </if>
+                    <if test='orObj_c1.tp=="eq"'>
+                        ${orObj_c1.col}=#{orObj_c1.val}
+                    </if>
+                    <if test='orObj_c1.tp=="neq"'>
+                        ${orObj_c1.col}!=#{orObj_c1.val}
+                    </if>
+                    <if test='orObj_c1.tp=="gt"'>
+                        ${andObj_c1.col}>#{andObj_c1.val}
+                    </if>
+                    <if test='orObj_c1.tp=="gte"'>
+                        ${andObj_c1.col}>=#{andObj_c1.val}
+                    </if>
+                    <if test='orObj_c1.tp=="lt"'>
+                        ${andObj_c1.col}<![CDATA[<]]>#{andObj_c1.val}
+                    </if>
+                    <if test='orObj_c1.tp=="lte"'>
+                        ${andObj_c1.col}<![CDATA[<]]>=#{andObj_c1.val}
+                    </if>
+                    <if test='orObj_c1.tp=="in"'>
+                        ${orObj_c1.col} in
+                        <foreach collection="orObj_c1.vals" item="value" open="(" close=")" separator=",">
+                            #{value}
+                        </foreach>
+                    </if>
+                    <if test='orObj_c1.tp=="notin" and orObj_c1.vals.size>0'>
+                        ${orObj_c1.col} not in
+                        <foreach collection="orObj_c1.vals" item="value" open="(" close=")" separator=",">
+                            #{value}
+                        </foreach>
+                    </if>
+                    <if test='orObj_c1.tp=="notnull"'>
+                        ${orObj_c1.col} is not null
+                    </if>
+                    <if test='orObj_c1.tp=="isnull"'>
+                        ${orObj_c1.col} is null
+                    </if>
+                </foreach>
+            </if>
+            <if test='obj_c1.tp=="lk"'>
+                lower(${obj_c1.col}) like '%'||lower(#{obj_c1.val})||'%'
+            </if>
+            <if test='obj_c1.tp=="nlk"'>
+                lower(${obj_c1.col}) not like '%'||lower(#{obj_c1.val})||'%'
+            </if>
+            <if test='obj_c1.tp=="eq"'>
+                ${obj_c1.col}=#{obj_c1.val}
+            </if>
+            <if test='obj_c1.tp=="neq"'>
+                ${obj_c1.col}!=#{obj_c1.val}
+            </if>
+            <if test='obj_c1.tp=="gt"'>
+                ${andObj_c1.col}>#{andObj_c1.val}
+            </if>
+            <if test='obj_c1.tp=="gte"'>
+                ${andObj_c1.col}>=#{andObj_c1.val}
+            </if>
+            <if test='obj_c1.tp=="lt"'>
+                ${andObj_c1.col}<![CDATA[<]]>#{andObj_c1.val}
+            </if>
+            <if test='obj_c1.tp=="lte"'>
+                ${andObj_c1.col}<![CDATA[<]]>=#{andObj_c1.val}
+            </if>
+            <if test='obj_c1.tp=="in"'>
+                ${obj_c1.col} in
+                <foreach collection="obj_c1.vals" item="val" open="(" close=")" separator=",">
+                    #{val}
+                </foreach>
+            </if>
+            <if test='obj_c1.tp=="notin" and obj_c1.vals.size>0'>
+                ${obj_c1.col} not in
+                <foreach collection="obj_c1.vals" item="val" open="(" close=")" separator=",">
+                    #{val}
+                </foreach>
+            </if>
+            <if test='obj_c1.tp=="notnull"'>
+                ${obj_c1.col} is not null
+            </if>
+            <if test='obj_c1.tp=="isnull"'>
+                ${obj_c1.col} is null
+            </if>
+        </if>
+    </sql>
+
+    <sql id="whereCause2">
+        <if test='obj_c2!=null and obj_c2.size>0'>
+            <!-- and -->
+            <if test='obj_c2.tp=="a"'>
+                <foreach collection="obj_c2.cas" item="andobj_c2" open="" close="" separator="and">
+                    <if test='andobj_c2.tp=="lk"'>
+                        ${alias?prefix:""}${andobj_c2.col} like '%'||#{andobj_c2.val}||'%'
+                    </if>
+                    <if test='andobj_c2.tp=="nlk"'>
+                        ${andobj_c2.col} not like '%'||#{andobj_c2.val}||'%'
+                    </if>
+                    <if test='andobj_c2.tp=="eq"'>
+                        ${andobj_c2.col}=#{andobj_c2.val}
+                    </if>
+                    <if test='andobj_c2.tp=="neq"'>
+                        ${andobj_c2.col}!=#{andobj_c2.val}
+                    </if>
+                    <if test='andobj_c2.tp=="gt"'>
+                        ${andobj_c2.col}>#{andobj_c2.val}
+                    </if>
+                    <if test='andobj_c2.tp=="gte"'>
+                        ${andobj_c2.col}>=#{andobj_c2.val}
+                    </if>
+                    <if test='andobj_c2.tp=="lt"'>
+                        ${andobj_c2.col}<![CDATA[<]]>#{andobj_c2.val}
+                    </if>
+                    <if test='andobj_c2.tp=="lte"'>
+                        ${andobj_c2.col}<![CDATA[<]]>=#{andobj_c2.val}
+                    </if>
+                    <if test='andobj_c2.tp=="in"'>
+                        ${andobj_c2.col} in
+                        <foreach collection="andobj_c2.vals" item="value" open="(" close=")" separator=",">
+                            #{value}
+                        </foreach>
+                    </if>
+                    <if test='andobj_c2.tp=="notin" and andobj_c2.vals.size>0'>
+                        ${andobj_c2.col} not in
+                        <foreach collection="andobj_c2.vals" item="value" open="(" close=")" separator=",">
+                            #{value}
+                        </foreach>
+                    </if>
+                    <if test='andobj_c2.tp=="notnull"'>
+                        ${andobj_c2.col} is not null
+                    </if>
+                    <if test='andobj_c2.tp=="isnull"'>
+                        ${andobj_c2.col} is null
+                    </if>
+                </foreach>
+            </if>
+            <!-- or -->
+            <if test='obj_c2.tp=="o"'>
+                <foreach collection="obj_c2.cas" item="orobj_c2" open="" close="" separator="or">
+                    <if test='orobj_c2.tp=="lk"'>
+                        lower(${orobj_c2.col}) like '%'||lower(#{orobj_c2.val})||'%'
+                    </if>
+                    <if test='orobj_c2.tp=="nlk"'>
+                        lower(${orobj_c2.col}) not like '%'||lower(#{orobj_c2.val})||'%'
+                    </if>
+                    <if test='orobj_c2.tp=="eq"'>
+                        ${orobj_c2.col}=#{orobj_c2.val}
+                    </if>
+                    <if test='orobj_c2.tp=="neq"'>
+                        ${orobj_c2.col}!=#{orobj_c2.val}
+                    </if>
+                    <if test='orobj_c2.tp=="gt"'>
+                        ${andobj_c2.col}>#{andobj_c2.val}
+                    </if>
+                    <if test='orobj_c2.tp=="gte"'>
+                        ${andobj_c2.col}>=#{andobj_c2.val}
+                    </if>
+                    <if test='orobj_c2.tp=="lt"'>
+                        ${andobj_c2.col}<![CDATA[<]]>#{andobj_c2.val}
+                    </if>
+                    <if test='orobj_c2.tp=="lte"'>
+                        ${andobj_c2.col}<![CDATA[<]]>=#{andobj_c2.val}
+                    </if>
+                    <if test='orobj_c2.tp=="in"'>
+                        ${orobj_c2.col} in
+                        <foreach collection="orobj_c2.vals" item="value" open="(" close=")" separator=",">
+                            #{value}
+                        </foreach>
+                    </if>
+                    <if test='orobj_c2.tp=="notin" and orobj_c2.vals.size>0'>
+                        ${orobj_c2.col} not in
+                        <foreach collection="orobj_c2.vals" item="value" open="(" close=")" separator=",">
+                            #{value}
+                        </foreach>
+                    </if>
+                    <if test='orobj_c2.tp=="notnull"'>
+                        ${orobj_c2.col} is not null
+                    </if>
+                    <if test='orobj_c2.tp=="isnull"'>
+                        ${orobj_c2.col} is null
+                    </if>
+                </foreach>
+            </if>
+            <if test='obj_c2.tp=="lk"'>
+                lower(${obj_c2.col}) like '%'||lower(#{obj_c2.val})||'%'
+            </if>
+            <if test='obj_c2.tp=="nlk"'>
+                lower(${obj_c2.col}) not like '%'||lower(#{obj_c2.val})||'%'
+            </if>
+            <if test='obj_c2.tp=="eq"'>
+                ${obj_c2.col}=#{obj_c2.val}
+            </if>
+            <if test='obj_c2.tp=="neq"'>
+                ${obj_c2.col}!=#{obj_c2.val}
+            </if>
+            <if test='obj_c2.tp=="gt"'>
+                ${andobj_c2.col}>#{andobj_c2.val}
+            </if>
+            <if test='obj_c2.tp=="gte"'>
+                ${andobj_c2.col}>=#{andobj_c2.val}
+            </if>
+            <if test='obj_c2.tp=="lt"'>
+                ${andobj_c2.col}<![CDATA[<]]>#{andobj_c2.val}
+            </if>
+            <if test='obj_c2.tp=="lte"'>
+                ${andobj_c2.col}<![CDATA[<]]>=#{andobj_c2.val}
+            </if>
+            <if test='obj_c2.tp=="in"'>
+                ${obj_c2.col} in
+                <foreach collection="obj_c2.vals" item="val" open="(" close=")" separator=",">
+                    #{val}
+                </foreach>
+            </if>
+            <if test='obj_c2.tp=="notin" and obj_c2.vals.size>0'>
+                ${obj_c2.col} not in
+                <foreach collection="obj_c2.vals" item="val" open="(" close=")" separator=",">
+                    #{val}
+                </foreach>
+            </if>
+            <if test='obj_c2.tp=="notnull"'>
+                ${obj_c2.col} is not null
+            </if>
+            <if test='obj_c2.tp=="isnull"'>
+                ${obj_c2.col} is null
+            </if>
+        </if>
+    </sql>
+
+    <select id="selectByCauses" parameterType="java.util.Map" resultType="java.util.Map">
+        select
+            <if test="distinct!=null and distinct=='true'">
+                distinct
+            </if>
+            <include refid="tcdx.uap.mapper.BaseDBMapper.selColumns" />
+            from ${tn}
+        <where>
+            <include refid="tcdx.uap.mapper.BaseDBMapper.whereCause1" />
+        </where>
+        <if test='sortMap!=null and sortMap.size>0'>
+            order by
+            <foreach collection="sortMap" index="sortColumn" item="ascending" open="" close="" separator=",">
+                ${sortColumn} ${ascending}
+            </foreach>
+        </if>
+    </select>
+
+
+    <select id="selectAndOrByCauses" parameterType="java.util.Map" resultType="java.util.Map">
+        select
+        *
+        from ${tn}
+        <where>
+            <include refid="tcdx.uap.mapper.BaseDBMapper.whereCause1" />
+            <if test='obj_c1!=null and obj_c1.size>0 and obj_c2!=null and obj_c2.size>0'>
+                and
+            </if>
+            <include refid="tcdx.uap.mapper.BaseDBMapper.whereCause2" />
+        and time_if_delete_ is null
+        </where>
+        <if test='sortMap!=null and sortMap.size>0'>
+            order by
+            <foreach collection="sortMap" index="sortColumn" item="ascending" open="" close="" separator=",">
+                ${sortColumn} ${ascending}
+            </foreach>
+        </if>
+    </select>
+
+    <select id="selectNew" parameterType="java.util.Map" resultType="java.util.Map">
+        select * from ${tn} where ${byNewCol}=(select max(${byNewCol}) from ${tn})
+    </select>
+
+    <select id="selectCountByCauses" parameterType="java.util.Map" resultType="java.util.Map">
+        select count(*) c from ${tn}
+        <where>
+            <include refid="tcdx.uap.mapper.BaseDBMapper.whereCause1" />
+        </where>
+    </select>
+
+    <select id="selectMaxByCauses" parameterType="java.util.Map" resultType="java.util.Map">
+        select max(${col}) as ${col} from ${tn}
+        <where>
+            <include refid="tcdx.uap.mapper.BaseDBMapper.whereCause1" />
+        </where>
+    </select>
+
+    <select id="selectMaxColEq" parameterType="java.util.Map" resultType="java.util.Map">
+        select max(${col}) as ${col} from ${tn}
+        where
+            <foreach collection="equalMap" index="key" item="val" open="(" close=")" separator="and">
+                ${key}=#{val}
+            </foreach>
+    </select>
+
+
+
+    <select id="selectNewById" parameterType="java.util.Map" resultType="java.util.Map">
+        select * from ${tn}
+        order by id desc
+        limit 1
+    </select>
+
+    <select id="selectCountGroupByCauses" parameterType="java.util.Map" resultType="java.util.Map">
+        select count(*) count,
+        <foreach collection="groupByColumnLists" item="value" open="" close="" separator=",">
+            ${value}
+        </foreach>
+        from ${tn}
+        <where>
+            <include refid="tcdx.uap.mapper.BaseDBMapper.whereCause1" />
+        </where>
+        group by
+        <foreach collection="groupByColumnLists" item="value" open="" close="" separator=",">
+            ${value}
+        </foreach>
+    </select>
+
+    <update id="updateById" parameterType="java.util.Map" >
+        update ${tn} set
+        <foreach collection="updateMap" index="key" item="val" open="" close="" separator=",">
+            ${key} = #{val}
+        </foreach>
+        where id=#{id}
+    </update>
+
+    <update id="updateIn" parameterType="java.util.Map" >
+        update ${tn} set
+        <foreach collection="updateMap" index="key" item="val" open="" close="" separator=",">
+            ${key} = #{val}
+        </foreach>
+        where ${columnName} in
+        <foreach collection="vals" item="val" open="(" close=")" separator=",">
+            #{val}
+        </foreach>
+    </update>
+
+    <update id="updateEq" parameterType="java.util.Map" >
+        update ${tn} set
+        <foreach collection="updateMap" index="key" item="val" open="" close="" separator=",">
+            ${key} = #{val}
+        </foreach>
+        where
+        <foreach collection="equalMap" index="key" item="val" open="" close="" separator="and">
+            ${key}=#{val}
+        </foreach>
+    </update>
+
+    <delete id="deleteById" parameterType="java.util.Map">
+        delete from ${tn} where id = #{id}
+    </delete>
+
+    <delete id="deleteEq" parameterType="java.util.Map">
+        delete from ${tn}
+        where
+        <foreach collection="equalMap" index="key" item="val" open="" close="" separator="and">
+            ${key}=#{val}
+        </foreach>
+    </delete>
+
+    <delete id="deleteIn" parameterType="java.util.Map" >
+        delete from ${tn}
+        where
+            ${col} in
+        <foreach collection="ids" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </delete>
+
+    <delete id="deleteByCause" parameterType="java.util.Map">
+        delete from ${tn} where
+        <include refid="tcdx.uap.mapper.BaseDBMapper.whereCause1" />
+    </delete>
+
+
+    <!-- 1.1 插入一条数据 -->
+    <select id="insertMapRetRow" parameterType="java.util.Map" resultType="java.util.Map">
+        insert into ${tn}
+        <foreach collection="insertMap.keys" item="key" open="(" close=")" separator=",">
+            ${key}
+        </foreach>
+        values
+        <foreach collection="insertMap.values" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+        returning *
+    </select>
+
+    <!-- 1.1 插入一条数据 -->
+    <insert id="insertMap" parameterType="java.util.Map">
+        insert into ${tn}
+        <foreach collection="insertMap.keys" item="key" open="(" close=")" separator=",">
+            ${key}
+        </foreach>
+        values
+        <foreach collection="insertMap.values" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </insert>
+
+
+    <update id="createTable" parameterType="java.util.Map">
+        create table ${tn} (
+        <foreach collection="createMap" index="key1" item="value1" open="" close="" separator=",">
+            <if test='value1!=null and value1!=""'>
+                ${key1} ${value1}
+            </if>
+        </foreach>
+        )
+    </update>
+
+
+    <update id="copyTableIn">
+        insert into ${totn}
+        <foreach collection="copyColumnNameList" item="value" open="(" close=")" separator=",">
+            ${value}
+        </foreach>
+        select
+        <foreach collection="copyColumnNameList" item="value" open="" close="" separator=",">
+            ${value}
+        </foreach> from ${fromtn} t where t.${inColumnName} in
+        <foreach collection="inValueList" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </update>
+
+    <update id="addTableColumns">
+        alter table ${tn}
+        <foreach collection="columnMap" index="columnName" item="type" open="" close="" separator=",">
+            add column ${columnName} ${type}
+        </foreach>
+    </update>
+
+    <select id="selectMax" resultType="java.util.Map">
+        select max(${increasedColumn}) ${increasedColumn} from ${tn}
+    </select>
+
+    <update id="tableDropColumn">
+        alter table ${tn} drop column ${columnName}
+    </update>
+
+    <update id="tableAddColumn">
+        alter table ${tn} ADD column ${columnName} ${columnType}
+    </update>
+
+    <update id="tableAlterColumnType">
+        alter table ${tn} ALTER column ${columnName} type ${newColumnType} USING ${columnName}::${newColumnType}
+    </update>
+
+    <update id="tableAlterColumnName">
+        alter table ${tn} RENAME column ${columnName} to ${newColumnName}
+    </update>
+
+    <update id="executeSql" parameterType="java.util.Map">
+        ${sql}
+    </update>
+
+    <select id="selectSql" parameterType="java.util.Map" resultType="java.util.Map">
+        ${sql}
+    </select>
+
+    <select id="selectDefinedSql" parameterType="java.util.Map" resultType="java.util.Map">
+        ${data_sql}
+        <if test="has_where">
+            ${where_sql}
+            <if test='obj_c1!=null and obj_c1.size>0'>
+             <if test='((obj_c1.tp=="a" or obj_c1.tp=="o") and obj_c1.cas.size>0) or (obj_c1.tp!="a" and obj_c1.tp!="o")'>
+                and
+                <include refid="tcdx.uap.mapper.BaseDBMapper.whereCause1" />
+             </if>
+            </if>
+        </if>
+        <if test="!has_where">
+            <where>
+                ${where_sql}
+            <if test='obj_c1!=null and obj_c1.size>0 and (((obj_c1.tp=="a" or obj_c1.tp=="o") and obj_c1.cas.size>0) or (obj_c1.tp!="a" and obj_c1.tp!="o"))'>
+                and
+                <include refid="tcdx.uap.mapper.BaseDBMapper.whereCause1" />
+            </if>
+            </where>
+        </if>
+        <if test='order_sql!=null'>
+            ${order_sql}
+        </if>
+    </select>
+
+    <select id="selectDefinedSqlCounts" parameterType="java.util.Map" resultType="java.util.Map">
+        select count(*) cnt from (
+            ${data_sql}
+        ) tmp
+    </select>
+
+
+    <select id="selectTreeList" resultType="java.util.Map">
+        WITH RECURSIVE CategoryCTE AS (
+            SELECT * -- 假设你的表中有名为name的列表示类别名称
+            FROM ${tn}  -- 假设你的表名为categories
+            WHERE id=#{id}  -- 起始条件，从顶级父节点开始
+            UNION ALL
+            SELECT c.*
+            FROM ${tn} c
+                     INNER JOIN CategoryCTE ON c.parent_id = CategoryCTE.id
+        )
+        SELECT * FROM CategoryCTE;
+    </select>
+
+
+
+</mapper>

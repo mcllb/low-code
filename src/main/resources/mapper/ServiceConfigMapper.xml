@@ -1,0 +1,986 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="tcdx.uap.mapper.ServiceConfigMapper">
+
+    <!-- 查询数据视图的数据 -->
+    <select id="select_taskdata" resultType="java.util.Map">
+        select * from ${tn} a
+        <where>
+            <include refid="tcdx.uap.mapper.BaseDBMapper.whereCause1" />
+        </where>
+    </select>
+
+    <!-- 待办 -->
+    <select id="select_flow_todo_list" resultType="java.util.Map">
+        SELECT <include refid="tcdx.uap.mapper.BaseDBMapper.selColumns" />
+        from ${tn}
+        where time_if_delete_ is null
+            and is_done_=false
+            and is_inst_ended_ = false
+            and <include refid="tcdx.uap.mapper.BaseDBMapper.whereCause1" />
+
+    </select>
+
+    <!-- 已办 -->
+    <select id="select_flow_done_list" resultType="java.util.Map">
+        SELECT <include refid="tcdx.uap.mapper.BaseDBMapper.selColumns" />
+        from ${tn}
+        where time_if_delete_ is null
+            and is_done_=true
+            and is_inst_user_new_complete_=true
+            and <include refid="tcdx.uap.mapper.BaseDBMapper.whereCause1" />
+    </select>
+
+
+    <!-- 我发起的 -->
+    <select id="select_flow_created_list" resultType="java.util.Map">
+        select <include refid="tcdx.uap.mapper.BaseDBMapper.selColumns" />
+        from ${tn}
+        where time_if_delete_ is null
+        and is_done_=true
+        and  <include refid="tcdx.uap.mapper.BaseDBMapper.whereCause1" />
+
+    </select>
+
+
+
+    <update id="copy_to_log" >
+        insert into ${tn}_log
+        select nextval('v_table_id_seq'),#{log_time_},t.* from ${tn} t where id_ in
+        <foreach collection="ids"  item="id_" open="(" close=")" separator=",">
+            #{id_}
+        </foreach>
+    </update>
+
+
+    <update id="updateunCompletedTask" parameterType="java.util.Map" >
+        update ${tn} set
+        <foreach collection="updateMap" index="key" item="val" open="" close="" separator=",">
+            ${key} = #{val}
+        </foreach>
+        where
+        id_=#{id_} and action_type_ like 'task-%'
+    </update>
+
+    <update id="set_delete_time" >
+        update ${tn} set time_if_delete_=CURRENT_TIMESTAMP where id_ in
+        <foreach collection="ids"  item="id_" open="(" close=")" separator=",">
+            #{id_}
+        </foreach>
+    </update>
+
+    <!-- 查询数据视图的数据 -->
+    <select id="select_function" resultType="java.util.Map">
+        SELECT b.name||'：'||a.name name,a.id FROM v_task_function a
+        join v_menu b on a.menu_id=b.id
+        where b.name||'：'||a.name like '%'||#{query}||'%'
+        <if test="view_col_id==null">
+            and a.action_type in ('data-create', 'task-start')
+        </if>
+
+    </select>
+
+    <!--
+    取当前任务完成后，派至的下一个任务。当前任务的execution_id的子execution执行完成后，
+    -->
+<!--    <select id="select_next_assign_task" resultType="java.util.Map">-->
+<!--        select a.id_ task_id_, a.name_ task_name_, a.task_def_key_, a.rev_ task_rev_, a.execution_id_,-->
+<!--               b.parent_id_ parent_execution_id_,b.rev_ execution_rev_-->
+<!--        from act_ru_task a-->
+<!--        join act_ru_execution b on a.execution_id_=b.id_ and a.proc_inst_id_=b.proc_inst_id_-->
+<!--        where b.parent_id_=#{parent_execution_id_}-->
+<!--    </select>-->
+
+    <insert id="insert_when_not_exists">
+        insert into ${tn}
+        <foreach collection="insertMap.keys" item="key" open="(" close=")" separator=",">
+            ${key}
+        </foreach>
+        values
+        <foreach collection="insertMap.values" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+        where not exists(select id_ from ${tn} where task_id_=#{insertMap.task_id_})
+    </insert>
+
+<!--    <select id="select_todo_counts" resultType="java.util.Map">-->
+<!--        select c.id menu_id,c.name,count(*) c from act_ru_task A-->
+<!--       join v_table b on a.proc_def_id_=b.proc_def_id_-->
+<!--       join v_menu c on b.menu_id=c.id-->
+<!--        GROUP BY c.id,c.name-->
+<!--    </select>-->
+
+    <update id="update_todo_tasks">
+        update ${tn} set todo_tasks_=(select count(*) c from ${tn} where proc_inst_id_=#{proc_inst_id_})
+        where proc_inst_id_=#{proc_inst_id_}
+    </update>
+
+    <select id="get_inst_his" resultType="java.util.Map">
+        select case when action_type_ like 'task-%' then complete_time_ else log_time_ end time_,
+               a.*
+        from ${tn}_log a
+        where proc_inst_id_=#{proc_inst_id_}
+        order by case when action_type_ not like 'data-%' and complete_time_ is null then 1 else 0 end desc,
+                 case when action_type_ like 'task-%' then complete_time_ else log_time_ end desc
+    </select>
+
+    <select id="get_data_his" resultType="java.util.Map">
+        select a.*
+        from ${tn}_log a
+        where id_=#{id_}
+        order by log_time_ desc
+    </select>
+
+    <select id="get_related_form_field" resultType="java.util.Map">
+        select a.*,b.id form_id_ from v_form_field a
+                 join v_form b on a.form_id=b.id
+        where b.menu_id=#{menu_id} and b.id in
+        <foreach collection="form_ids" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+        order by a.form_id,a.ord
+    </select>
+
+    <select id="get_view_grid_cols" resultType="java.util.Map">
+        select a.id,
+       b.field,
+       COALESCE(b.data_type,'varchar')  data_type,
+       a.title,
+       case when a.use_default then b.min_width else a.min_width end min_width,
+       case when a.use_default then b.width else a.width end width,
+       case when a.use_default then b.column_type else a.column_type end column_type,
+       case when a.use_default then b.column_props else a.column_props end column_props,
+       case when a.use_default then b.mobile_display_position else a.mobile_display_position end mobile_display_position,
+       case when a.use_default then b.icon else a.icon end icon,
+       case when a.use_default then b.column_props else a.column_props end column_props,
+       a.is_show,
+       a.ord,
+       a.fixed,
+       a.use_default,
+       a.table_id,
+       a.table_col_id,
+       a.search_comp_id,
+       a.search_expand,
+       a.flow_btn_slot,
+       b.name table_col_name,
+       b.rel_dict_id,
+       b.is_system_value,
+       d.table_name,
+       d.table_display_name,
+        a.flow_edge_id,
+        a.column_data_attr,
+       e.label flow_edge_label
+        from v_view_grid_col a
+        left join v_table_col b on a.table_col_id=b.id
+        left join v_table d on a.table_id=d.id
+        left join v_flow_edge e on a.flow_edge_id=e.id    --关联动作列的信息
+        where a.view_id=#{view_id} and (
+            -- 什么时候需要 table_id 的限制
+            a.table_id in
+            <foreach collection="table_ids" item="value" open="(" close=")" separator=",">
+                #{value}
+            </foreach>
+            or a.table_id is null
+            )
+        order by a.ord
+    </select>
+
+    <!-- 获取字段之间的关系 -->
+    <select id="get_table_column_trigger_relations" resultType="java.util.Map">
+        select
+            a.*
+             ,t.table_name table_name
+             ,t.type table_type
+             ,t.menu_id menu_id
+             ,m.name menu_name
+             ,t2.table_name depend_table_name
+             ,m2.name depend_menu_name
+        from  v_table_col a
+                  join v_table t on a.table_id=t.id
+                  join v_menu m on t.menu_id=m.id
+                  join v_table t2 on a.depend_table_id=t2.id
+                  join v_menu m2 on t2.menu_id=m2.id
+        where a.depent_table_id=#{depent_table_id} --and a.field_content_from='related-datatable'
+    </select>
+
+    <!-- 获取字段之间的关系 -->
+    <select id="get_table_column_depent_relations" resultType="java.util.Map">
+        select
+            a.*
+             ,t.table_name trigger_table_name
+             ,t.type trigger_type
+             ,t.menu_id trigger_menu_id
+             ,m.name trigger_menu_name
+             ,t2.table_name depend_table_name
+             ,m2.name depend_menu_name
+        from  v_table_col a
+                  join v_table t on a.table_id=t.id
+                  join v_menu m on t.menu_id=m.id
+                  join v_table t2 on a.depend_table_id=t2.id
+                  join v_menu m2 on t2.menu_id=m2.id
+        where a.field_content_from='related-table'
+    </select>
+
+    <update id="update_by_depend_col_new_value">
+        update ${table_name} a set ${update_column}=(
+            select ${depend_table_column}
+            from ${depend_table_name} b
+            where 1=1
+                <if test='relation.match_column1!=null and relation.match_column1!=""'>
+                    and a.${relation.match_column1}=b.${relation.depend_table_match_column1}
+                </if>
+                <if test='relation.match_column2!=null and relation.match_column2!=""'>
+                    and a.${relation.match_column2}=b.${relation.depend_table_match_column2}
+                </if>
+                <if test='relation.match_column3!=null and relation.match_column3!=""'>
+                    and a.${relation.match_column3}=b.${relation.depend_table_match_column3}
+                </if>
+            --group by a.zhiju,a.kehumingcheng
+            order by b.update_time_ desc
+            limit 1
+        )
+        where a.id_ in
+        <foreach collection="inIds" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </update>
+
+    <update id="update_by_depend_col_count">
+        update ${table_name} a set a.${update_column}=(
+            select count(${depend_table_column}) cnt
+            from ${depend_table_name} b
+            where 1=1
+            <if test='relation.match_column1!=null and relation.match_column1!=""'>
+                and a.${relation.match_column1}=b.${relation.depend_table_match_column1}
+            </if>
+            <if test='relation.match_column2!=null and relation.match_column2!=""'>
+                and a.${relation.match_column2}=b.${relation.depend_table_match_column2}
+            </if>
+            <if test='relation.match_column3!=null and relation.match_column3!=""'>
+                and a.${relation.match_column3}=b.${relation.depend_table_match_column3}
+            </if>
+        )
+        where a.id_ in
+        <foreach collection="inIds" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </update>
+
+    <delete id="delete_view_grid_col">
+        delete from v_view_grid_col
+               where view_id=#{view_id} and table_col_id is not null
+        <if test="table_col_ids.size>0">
+            and table_col_id not in
+            <foreach collection="table_col_ids" item="value" open="(" close=")" separator=",">
+                #{value}
+            </foreach>
+        </if>
+    </delete>
+
+    <insert id="add_view_grid_col">
+        insert into v_view_grid_col (table_col_id,table_id,view_id,title,min_width,column_type,is_show,ord,use_default,fixed)
+        select id,table_id,#{view_id},name,200,'文本',true,#{maxOrd}+(ROW_NUMBER() OVER()),true,'none'
+        from v_table_col
+        where id not in (select table_col_id from v_view_grid_col where view_id=#{view_id} and table_col_id is not null)
+        <if test="table_col_ids.size>0">
+        and id in
+        <foreach collection="table_col_ids" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+        </if>
+    </insert>
+
+    <insert id="add_view_grid_flow_col">
+        insert into v_view_grid_col (table_col_id,table_id,view_id,title,min_width,column_type,is_show,ord,use_default,fixed)
+        select id,table_id,#{view_id},#{col_name},200,#{col_type},true,#{maxOrd}+(ROW_NUMBER() OVER()),true,'none'
+        from v_flow_edge a
+        join v_view_grid_col b on a.
+        where id=#{flow_edge_id}
+
+    </insert>
+
+    <delete id="delete_view_grid_flow_col">
+        delete from v_view_grid_col
+        where view_id=#{view_id} and column_data_attr is not null
+        <if test="flow_attrs.size>0">
+            and (case when flow_edge_id is null then -1 else flow_edge_id end,column_data_attr) not in
+            <foreach collection="flow_attrs" item="map" open="(" close=")" separator=" union ">
+                select #{map.flow_edge_id},#{map.column_data_attr}
+            </foreach>
+        </if>
+    </delete>
+
+    <select id="get_table_col_lk_name" resultType="java.util.Map">
+        SELECT
+            b.field ,
+            b.name title,
+            a.id datatable_id,
+            a.table_display_name,
+            b.id column_id
+        from v_table a
+                 join v_table_col b on a.id=b.table_id
+        where a.id=#{table_id} and a.table_display_name||b.name like '%'||#{query}||'%'
+        order by a.id,b.ord
+    </select>
+
+    <select id="get_table_relations" resultType="java.util.Map">
+        SELECT a.*,b.table_display_name,c.table_display_name foreign_table_display_name
+        FROM v_table_rel a
+                 join v_table b on a.table_id=b.id
+                 join v_table c on a.foreign_table_id=c.id
+        <if test="table_id!=null">
+        where a.table_id=#{table_id} or a.foreign_table_id=#{table_id}
+        </if>
+    </select>
+
+    <select id="get_view_nodes" resultType="java.util.Map">
+        select a.*
+             --,case when b.childs is null then false else true end hasChildren
+        from v_view a
+        --left join (select parent_id,count(*) childs from v_view group by parent_id) b on a.id=b.parent_id
+        where 1=1
+        <if test="query!=null and query!=''">
+        and a.name like '%'||#{query}||'%'
+        </if>
+        <if test="parent_id!=null">
+            and a.parent_id=#{parent_id}
+        </if>
+    </select>
+
+
+    <select id="get_parent_views_comps" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT id,name,parent_id,view_type,comp_id,display_type,ord
+            FROM v_view WHERE parent_id = #{parent_id}
+            UNION
+            SELECT
+                e.id,e.name,e.parent_id,e.view_type,e.comp_id,e.display_type,e.ord
+            FROM v_view e
+                     INNER JOIN rec_table s ON s.id = e.parent_id
+        )
+        SELECT a.*,a.comp_name
+        FROM rec_table a
+        order by ord
+    </select>
+
+    <select id="get_group_views" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT id,name,parent_id,view_type,comp_id,display_type,ord
+            FROM v_view WHERE parent_id in (select id from v_view_group)
+            UNION
+            SELECT
+                e.id,e.name,e.parent_id,e.view_type,e.comp_id,e.display_type,e.ord
+            FROM v_view e
+                     INNER JOIN rec_table s ON s.id = e.parent_id
+        )
+        SELECT a.*,a.comp_name
+        FROM rec_table a
+        order by ord
+    </select>
+
+    <select id="get_prev_view" resultType="java.util.Map" parameterType="java.util.Map" >
+        select *
+        from v_view a
+        where a.parent_id=#{parent_id} and a.ord
+        <if test="step==1">
+            <![CDATA[>]]>
+        </if>
+        <if test="step==-1">
+            <![CDATA[<]]>
+        </if>
+            (select ord from v_view where id=#{id})
+        <if test="step==1">
+            order by a.ord asc
+        </if>
+        <if test="step==-1">
+            order by a.ord desc
+        </if>
+        limit 1
+    </select>
+
+    <select id="get_flow_btns"  resultType="java.util.Map" parameterType="java.util.Map">
+        select * from v_exec_obj
+        where flow_node_id=#{node_id} or flow_edge_id in (
+            select id from v_flow_edge where src=#{node_id}
+            )
+    </select>
+
+
+    <select id="get_role_list"  resultType="java.util.Map" parameterType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+        SELECT id,name,parent_id,ord,inherit_role_id,group_attr,sas_system_id,is_deleted
+        FROM v_role
+        <where>
+            <if test="(user==null or user.user_id!=879) or sas_system_id!=null">
+                id in (select id from v_role where sas_system_id=#{sas_system_id})
+            </if>
+        </where>
+        UNION
+        SELECT
+        e.id,e.name,e.parent_id,e.ord,e.inherit_role_id,e.group_attr,e.sas_system_id,e.is_deleted
+        FROM v_role e
+        INNER JOIN rec_table s ON e.parent_id = s.id and e.is_deleted=false and s.is_deleted=false
+        )
+        SELECT a.* FROM rec_table a where a.is_deleted=false
+    </select>
+
+    <select id="get_rel_group_user"  resultType="java.util.Map" parameterType="java.util.Map">
+        select * from v_user
+        where group_id=#{group_id}
+        <if test="role_id!=null" >
+        and id in  (
+            select user_id from v_user_role where role_id=#{role_id}
+        )
+        </if>
+        <if test="post_id!=null" >
+            and post_id=#{post_id}
+        </if>
+    </select>
+
+
+    <update id="update_by_depend_col_counts">
+        update z_table${table_id} a set ${field}=(
+        select count(b.${depend_field}) cnt
+        from z_table${depend_table_id} b
+        where b.z_table${table_id}_id in
+        <foreach collection="id_list" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+        )
+        where a.id_ in
+        <foreach collection="id_list" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </update>
+
+    <update id="update_by_depend_col_sum">
+        update z_table${table_id} a set ${field}=(
+        select sum(cast(b.${depend_field} as numeric)) cnt
+        from z_table${depend_table_id} b
+        where b.z_table${table_id}_id in
+        <foreach collection="id_list" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+        )
+        where a.id_ in
+        <foreach collection="id_list" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </update>
+
+    <update id="update_by_depend_col_distinct">
+        update z_table${table_id} a set ${field}=(
+        select distinct(${depend_field}) cnt
+        from z_table${depend_table_id} b
+        where b.z_table${table_id}_id in
+        <foreach collection="id_list" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+        )
+        where a.id_ in
+        <foreach collection="id_list" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </update>
+
+    <update id="update_by_depend_col_newvalue">
+        update z_table${table_id} a set ${field}=(
+        select ${depend_field}
+        from z_table${depend_table_id} b
+        where b.z_table${table_id}_id in
+        <foreach collection="id_list" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+        order by b.update_time_ desc
+        limit 1
+        )
+        where a.id_ in
+        <foreach collection="id_list" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </update>
+
+    <update id="insert_by_depend_col_newvalue">
+        update z_table${table_id} a set ${field}=(
+        select ${depend_field}
+        from z_table${depend_table_id} b
+        where b.z_table${table_id}_id in
+        <foreach collection="id_list" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+        order by b.create_time_ desc
+        limit 1
+        )
+        where a.id_ in
+        <foreach collection="id_list" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </update>
+
+    <select id="get_flow_node_event" parameterType="java.util.Map" resultType="java.util.Map">
+        select a.id,a.label,a.type,a.sub_flow_table_id,b.id event_id,b.flow_node_id,b.node_in,b.node_out,b.node_read
+        from v_flow_node a
+        left join v_exec_trg_by_flow_event b on a.id=b.flow_node_id and b.exec_id=#{exec_id}
+        where a.table_id=#{table_id}
+        order by a.id
+    </select>
+
+
+    <select id="get_flow_edge_data_scope" parameterType="java.util.Map" resultType="java.util.Map">
+        select a.id, a.label, b.id scope_id, b.my_posted, b.my_received, b.group_posted,b.group_received,b.contains_flow_action
+            ,c.label src_label,d.label dst_label
+        from v_flow_edge a
+         join v_flow_node c on a.src=c.id and (c.is_deleted is null or c.is_deleted=false)
+         join v_flow_node d on a.dst=d.id and (d.is_deleted is null or d.is_deleted=false)
+        left join v_grid_data_scope b on a.id=b.flow_edge_id and b.ds_id=#{ds_id}
+        where a.table_id=#{table_id} and (a.is_deleted=false or a.is_deleted is null)
+        order by a.id
+    </select>
+
+    <select id="get_flow_edge_event" parameterType="java.util.Map" resultType="java.util.Map">
+        select a.id,a.label,b.id event_id,b.flow_edge_id,b.before_exec,b.after_exec
+        from v_flow_edge a
+        left join v_exec_trg_by_edge_event b on a.id=b.flow_edge_id and b.exec_id=#{exec_id}
+        where a.table_id=#{table_id}
+        order by a.id
+    </select>
+
+    <select id="get_table_flowed_cols" parameterType="java.util.Map" resultType="java.util.Map">
+        select a.id,a.label
+             ,b.type src_type,b.label src_label
+             ,c.type dst_type,c.label dst_label
+        from v_flow_edge a
+        join v_flow_node b on a.src=b.id and (b.is_deleted is null or b.is_deleted=false)
+        join v_flow_node c on a.dst=c.id and (c.is_deleted is null or c.is_deleted=false)
+        where a.table_id=#{table_id} and c.type!='gate' and (a.is_deleted is null or a.is_deleted=false)
+    </select>
+
+    <select id="get_view_notice_scope" resultType="java.util.Map">
+        SELECT a.*
+             ,b.name view_name
+             ,c.table_display_name table_name
+             ,d.label flow_obj_label
+        FROM v_view_notice_flow_condition a
+         join v_view b on a.view_id=b.id
+         join v_table c on a.table_id=c.id
+         left join v_flow_edge d on a.obj_id=d.id
+        where a.view_id = #{view_id} and a.obj_type='edge'
+        union
+        SELECT a.*
+             ,b.name view_name
+             ,c.table_display_name table_name
+             ,d.label flow_obj_label
+        FROM v_view_notice_flow_condition a
+         join v_view b on a.view_id=b.id
+         join v_table c on a.table_id=c.id
+         left join v_flow_node d on a.obj_id=d.id
+        where a.view_id = #{view_id} and a.obj_type='node'
+    </select>
+
+    <select id="get_view_aggr_count_items" resultType="java.util.Map">
+        SELECT a.*
+             ,f1.field_type label_field_type
+             ,f2.field_type count_field_type
+             ,f3.field_type total_field_type
+             ,f4.field_type value3_field_type
+             ,case
+                  when f1.field_type='ds_total' then 'ds_total'
+                  when f1.field_type='ds_count' then 'ds_count'
+                  when f1.field_type='pri_sub_receiver_info' then 'pri_sub_receiver_info'
+                  when f1.field_type='defined_field' then f1.defined_field
+                  when f1.field_type='table_field' then t1.field
+                  when f1.field_type='flow_field' and f1.flow_edge_id=-1 then f1.flow_field
+                  when f1.field_type='flow_field' and f1.flow_edge_id>0 then 'f'||f1.flow_edge_id||f1.flow_field
+                  else '' end label_field
+             ,case
+                  when f2.field_type='ds_total' then 'ds_total'
+                  when f2.field_type='ds_count' then 'ds_count'
+                  when f2.field_type='pri_sub_receiver_info' then 'pri_sub_receiver_info'
+                  when f2.field_type='defined_field' then f2.defined_field
+                  when f2.field_type='table_field' then t2.field
+                  when f2.field_type='flow_field' and f2.flow_edge_id=-2 then f2.flow_field
+                  when f2.field_type='flow_field' and f2.flow_edge_id>0 then 'f'||f2.flow_edge_id||f2.flow_field
+                  else '' end count_field
+             ,case
+                  when f3.field_type='ds_total' then 'ds_total'
+                  when f3.field_type='ds_count' then 'ds_count'
+                  when f3.field_type='pri_sub_receiver_info' then 'pri_sub_receiver_info'
+                  when f3.field_type='defined_field' then f3.defined_field
+                  when f3.field_type='table_field' then t3.field
+                  when f3.field_type='flow_field' and f3.flow_edge_id=-3 then f3.flow_field
+                  when f3.field_type='flow_field' and f3.flow_edge_id>0 then 'f'||f3.flow_edge_id||f3.flow_field
+                  else '' end total_field
+             ,case
+                  when f4.field_type='ds_total' then 'ds_total'
+                  when f4.field_type='ds_count' then 'ds_count'
+                  when f4.field_type='pri_sub_receiver_info' then 'pri_sub_receiver_info'
+                  when f4.field_type='defined_field' then f4.defined_field
+                  when f4.field_type='table_field' then t4.field
+                  when f4.field_type='flow_field' and f4.flow_edge_id=-4 then f4.flow_field
+                  when f4.field_type='flow_field' and f4.flow_edge_id>0 then 'f'||f4.flow_edge_id||f4.flow_field
+                  else '' end value3_field
+        FROM v_comp_count_aggr t
+                 join v_comp_count_aggr_item a on a.comp_id=t.id
+                 left join v_datasource_field f1 on a.label_ds_field_id=f1.id
+                 left join v_table_col t1 on f1.table_col_id=t1.id
+                 left join v_datasource_field f2 on a.count_ds_field_id=f2.id
+                 left join v_table_col t2 on f2.table_col_id=t2.id
+                 left join v_datasource_field f3 on a.total_ds_field_id=f3.id
+                 left join v_table_col t3 on f3.table_col_id=t3.id
+                 left join v_datasource_field f4 on a.value3_ds_field_id=f4.id
+                 left join v_table_col t4 on f4.table_col_id=t4.id
+        where t.id=#{comp_id}
+        order by a.ord
+    </select>
+
+    <select id="get_comp_echarts_cfg" resultType="java.util.Map">
+        SELECT a.*
+             ,f1.field_type x_field_type
+             ,f2.field_type y_field_type
+             ,f3.field_type series_field_type
+             ,case
+                  when f1.field_type='ds_total' then 'ds_total'
+                  when f1.field_type='ds_count' then 'ds_count'
+                  when f1.field_type='pri_sub_receiver_info' then 'pri_sub_receiver_info'
+                  when f1.field_type='defined_field' then f1.defined_field
+                  when f1.field_type='table_field' then t1.field
+                  when f1.field_type='flow_field' and f1.flow_edge_id=-1 then f1.flow_field
+                  when f1.field_type='flow_field' and f1.flow_edge_id>0 then 'f'||f1.flow_edge_id||f1.flow_field
+                  else '' end x_field
+             ,case
+                  when f2.field_type='ds_total' then 'ds_total'
+                  when f2.field_type='ds_count' then 'ds_count'
+                  when f2.field_type='pri_sub_receiver_info' then 'pri_sub_receiver_info'
+                  when f2.field_type='defined_field' then f2.defined_field
+                  when f2.field_type='table_field' then t2.field
+                  when f2.field_type='flow_field' and f2.flow_edge_id=-2 then f2.flow_field
+                  when f2.field_type='flow_field' and f2.flow_edge_id>0 then 'f'||f2.flow_edge_id||f2.flow_field
+                  else '' end y_field
+             ,case
+                  when f3.field_type='ds_total' then 'ds_total'
+                  when f3.field_type='ds_count' then 'ds_count'
+                  when f3.field_type='pri_sub_receiver_info' then 'pri_sub_receiver_info'
+                  when f3.field_type='defined_field' then f3.defined_field
+                  when f3.field_type='table_field' then t3.field
+                  when f3.field_type='flow_field' and f3.flow_edge_id=-3 then f3.flow_field
+                  when f3.field_type='flow_field' and f3.flow_edge_id>0 then 'f'||f3.flow_edge_id||f3.flow_field
+                  else '' end series_field
+        FROM v_comp_echarts a
+                 left join v_datasource_field f1 on a.x_ds_field_id=f1.id
+                 left join v_table_col t1 on f1.table_col_id=t1.id
+                 left join v_datasource_field f2 on a.y_ds_field_id=f2.id
+                 left join v_table_col t2 on f2.table_col_id=t2.id
+                 left join v_datasource_field f3 on a.series_ds_field_id=f3.id
+                 left join v_table_col t3 on f3.table_col_id=t3.id
+        where a.obj_id=#{obj_id} and a.obj_type=#{obj_type}
+    </select>
+
+    <select id="get_comp_gantt_echarts_cfg" resultType="java.util.Map">
+        SELECT
+            a.*
+            , 'gantt' as echarts_type
+             -- ===== 字段类型（可选：前端如需展示/判断） =====
+             , f_task.field_type          AS task_name_field_type
+             , f_start.field_type         AS start_time_field_type
+             , f_end.field_type           AS end_time_field_type
+             , f_dur.field_type           AS duration_days_field_type
+             , f_prog.field_type          AS progress_field_type
+             , f_group.field_type         AS "group_field_type"
+             , f_status.field_type        AS status_field_type
+             , f_pred.field_type          AS predecessors_field_type
+             , f_parent.field_type        AS parent_id_field_type
+             , f_prio.field_type          AS priority_field_type
+             , f_notes.field_type         AS notes_field_type
+             , f_mile.field_type          AS is_milestone_field_type
+
+             -- ===== 解析为可直接用于 row[key] 的字段名 =====
+             , CASE
+                   WHEN f_task.field_type='defined_field' THEN f_task.defined_field
+                   WHEN f_task.field_type='table_field'   THEN t_task.field
+                   WHEN f_task.field_type='flow_field' AND COALESCE(f_task.flow_edge_id,0) > 0
+                       THEN 'f' || f_task.flow_edge_id || f_task.flow_field
+                   WHEN f_task.field_type='flow_field'    THEN f_task.flow_field
+                   WHEN f_task.field_type IN ('ds_total','ds_count','pri_sub_receiver_info') THEN f_task.field_type
+                   ELSE '' END                             AS task_name_field
+
+             , CASE
+                   WHEN f_start.field_type='defined_field' THEN f_start.defined_field
+                   WHEN f_start.field_type='table_field'   THEN t_start.field
+                   WHEN f_start.field_type='flow_field' AND COALESCE(f_start.flow_edge_id,0) > 0
+                       THEN 'f' || f_start.flow_edge_id || f_start.flow_field
+                   WHEN f_start.field_type='flow_field'    THEN f_start.flow_field
+                   WHEN f_start.field_type IN ('ds_total','ds_count','pri_sub_receiver_info') THEN f_start.field_type
+                   ELSE '' END                             AS start_time_field
+
+             , CASE
+                   WHEN f_end.field_type='defined_field' THEN f_end.defined_field
+                   WHEN f_end.field_type='table_field'   THEN t_end.field
+                   WHEN f_end.field_type='flow_field' AND COALESCE(f_end.flow_edge_id,0) > 0
+                       THEN 'f' || f_end.flow_edge_id || f_end.flow_field
+                   WHEN f_end.field_type='flow_field'    THEN f_end.flow_field
+                   WHEN f_end.field_type IN ('ds_total','ds_count','pri_sub_receiver_info') THEN f_end.field_type
+                   ELSE '' END                             AS end_time_field
+
+             , CASE
+                   WHEN f_dur.field_type='defined_field' THEN f_dur.defined_field
+                   WHEN f_dur.field_type='table_field'   THEN t_dur.field
+                   WHEN f_dur.field_type='flow_field' AND COALESCE(f_dur.flow_edge_id,0) > 0
+                       THEN 'f' || f_dur.flow_edge_id || f_dur.flow_field
+                   WHEN f_dur.field_type='flow_field'    THEN f_dur.flow_field
+                   WHEN f_dur.field_type IN ('ds_total','ds_count','pri_sub_receiver_info') THEN f_dur.field_type
+                   ELSE '' END                             AS duration_days_field
+
+             , CASE
+                   WHEN f_prog.field_type='defined_field' THEN f_prog.defined_field
+                   WHEN f_prog.field_type='table_field'   THEN t_prog.field
+                   WHEN f_prog.field_type='flow_field' AND COALESCE(f_prog.flow_edge_id,0) > 0
+                       THEN 'f' || f_prog.flow_edge_id || f_prog.flow_field
+                   WHEN f_prog.field_type='flow_field'    THEN f_prog.flow_field
+                   WHEN f_prog.field_type IN ('ds_total','ds_count','pri_sub_receiver_info') THEN f_prog.field_type
+                   ELSE '' END                             AS progress_field
+
+             , CASE
+                   WHEN f_group.field_type='defined_field' THEN f_group.defined_field
+                   WHEN f_group.field_type='table_field'   THEN t_group.field
+                   WHEN f_group.field_type='flow_field' AND COALESCE(f_group.flow_edge_id,0) > 0
+                       THEN 'f' || f_group.flow_edge_id || f_group.flow_field
+                   WHEN f_group.field_type='flow_field'    THEN f_group.flow_field
+                   WHEN f_group.field_type IN ('ds_total','ds_count','pri_sub_receiver_info') THEN f_group.field_type
+                   ELSE '' END                             AS "group_field"
+
+             , CASE
+                   WHEN f_status.field_type='defined_field' THEN f_status.defined_field
+                   WHEN f_status.field_type='table_field'   THEN t_status.field
+                   WHEN f_status.field_type='flow_field' AND COALESCE(f_status.flow_edge_id,0) > 0
+                       THEN 'f' || f_status.flow_edge_id || f_status.flow_field
+                   WHEN f_status.field_type='flow_field'    THEN f_status.flow_field
+                   WHEN f_status.field_type IN ('ds_total','ds_count','pri_sub_receiver_info') THEN f_status.field_type
+                   ELSE '' END                             AS status_field
+
+             , CASE
+                   WHEN f_pred.field_type='defined_field' THEN f_pred.defined_field
+                   WHEN f_pred.field_type='table_field'   THEN t_pred.field
+                   WHEN f_pred.field_type='flow_field' AND COALESCE(f_pred.flow_edge_id,0) > 0
+                       THEN 'f' || f_pred.flow_edge_id || f_pred.flow_field
+                   WHEN f_pred.field_type='flow_field'    THEN f_pred.flow_field
+                   WHEN f_pred.field_type IN ('ds_total','ds_count','pri_sub_receiver_info') THEN f_pred.field_type
+                   ELSE '' END                             AS predecessors_field
+
+             , CASE
+                   WHEN f_parent.field_type='defined_field' THEN f_parent.defined_field
+                   WHEN f_parent.field_type='table_field'   THEN t_parent.field
+                   WHEN f_parent.field_type='flow_field' AND COALESCE(f_parent.flow_edge_id,0) > 0
+                       THEN 'f' || f_parent.flow_edge_id || f_parent.flow_field
+                   WHEN f_parent.field_type='flow_field'    THEN f_parent.flow_field
+                   WHEN f_parent.field_type IN ('ds_total','ds_count','pri_sub_receiver_info') THEN f_parent.field_type
+                   ELSE '' END                             AS parent_id_field
+
+             , CASE
+                   WHEN f_prio.field_type='defined_field' THEN f_prio.defined_field
+                   WHEN f_prio.field_type='table_field'   THEN t_prio.field
+                   WHEN f_prio.field_type='flow_field' AND COALESCE(f_prio.flow_edge_id,0) > 0
+                       THEN 'f' || f_prio.flow_edge_id || f_prio.flow_field
+                   WHEN f_prio.field_type='flow_field'    THEN f_prio.flow_field
+                   WHEN f_prio.field_type IN ('ds_total','ds_count','pri_sub_receiver_info') THEN f_prio.field_type
+                   ELSE '' END                             AS priority_field
+
+             , CASE
+                   WHEN f_notes.field_type='defined_field' THEN f_notes.defined_field
+                   WHEN f_notes.field_type='table_field'   THEN t_notes.field
+                   WHEN f_notes.field_type='flow_field' AND COALESCE(f_notes.flow_edge_id,0) > 0
+                       THEN 'f' || f_notes.flow_edge_id || f_notes.flow_field
+                   WHEN f_notes.field_type='flow_field'    THEN f_notes.flow_field
+                   WHEN f_notes.field_type IN ('ds_total','ds_count','pri_sub_receiver_info') THEN f_notes.field_type
+                   ELSE '' END                             AS notes_field
+
+             , CASE
+                   WHEN f_mile.field_type='defined_field' THEN f_mile.defined_field
+                   WHEN f_mile.field_type='table_field'   THEN t_mile.field
+                   WHEN f_mile.field_type='flow_field' AND COALESCE(f_mile.flow_edge_id,0) > 0
+                       THEN 'f' || f_mile.flow_edge_id || f_mile.flow_field
+                   WHEN f_mile.field_type='flow_field'    THEN f_mile.flow_field
+                   WHEN f_mile.field_type IN ('ds_total','ds_count','pri_sub_receiver_info') THEN f_mile.field_type
+                   ELSE '' END                             AS is_milestone_field
+
+        FROM v_comp_echarts_gantt a
+                 -- task_name
+                 LEFT JOIN v_datasource_field f_task   ON a.task_name      = f_task.id
+                 LEFT JOIN v_table_col        t_task   ON f_task.table_col_id = t_task.id
+            -- start_time
+                 LEFT JOIN v_datasource_field f_start  ON a.start_time     = f_start.id
+                 LEFT JOIN v_table_col        t_start  ON f_start.table_col_id = t_start.id
+            -- end_time
+                 LEFT JOIN v_datasource_field f_end    ON a.end_time       = f_end.id
+                 LEFT JOIN v_table_col        t_end    ON f_end.table_col_id   = t_end.id
+            -- duration_days
+                 LEFT JOIN v_datasource_field f_dur    ON a.duration_days  = f_dur.id
+                 LEFT JOIN v_table_col        t_dur    ON f_dur.table_col_id   = t_dur.id
+            -- progress
+                 LEFT JOIN v_datasource_field f_prog   ON a.progress       = f_prog.id
+                 LEFT JOIN v_table_col        t_prog   ON f_prog.table_col_id  = t_prog.id
+            -- "group"（关键字，列需转义）
+                 LEFT JOIN v_datasource_field f_group  ON a."group"        = f_group.id
+                 LEFT JOIN v_table_col        t_group  ON f_group.table_col_id = t_group.id
+            -- status
+                 LEFT JOIN v_datasource_field f_status ON a.status         = f_status.id
+                 LEFT JOIN v_table_col        t_status ON f_status.table_col_id = t_status.id
+            -- predecessors
+                 LEFT JOIN v_datasource_field f_pred   ON a.predecessors   = f_pred.id
+                 LEFT JOIN v_table_col        t_pred   ON f_pred.table_col_id  = t_pred.id
+            -- parent_id
+                 LEFT JOIN v_datasource_field f_parent ON a.parent_id      = f_parent.id
+                 LEFT JOIN v_table_col        t_parent ON f_parent.table_col_id = t_parent.id
+            -- priority
+                 LEFT JOIN v_datasource_field f_prio   ON a.priority       = f_prio.id
+                 LEFT JOIN v_table_col        t_prio   ON f_prio.table_col_id  = t_prio.id
+            -- notes
+                 LEFT JOIN v_datasource_field f_notes  ON a.notes          = f_notes.id
+                 LEFT JOIN v_table_col        t_notes  ON f_notes.table_col_id  = t_notes.id
+            -- is_milestone
+                 LEFT JOIN v_datasource_field f_mile   ON a.is_milestone   = f_mile.id
+                 LEFT JOIN v_table_col        t_mile   ON f_mile.table_col_id   = t_mile.id
+
+        WHERE a.obj_id = #{obj_id}
+          AND a.obj_type = #{obj_type}
+    </select>
+
+
+    <select id="get_view_folder" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT *
+            FROM v_tree_view WHERE id=#{view_id}
+            UNION
+            SELECT
+                e.*
+            FROM v_tree_view e
+                     INNER JOIN rec_table s ON s.parent_id = e.id
+        )
+        SELECT a.* FROM rec_table a where type='folder'
+    </select>
+
+    <update id="delete_datasource_col">
+        update v_datasource_field set is_deleted=true where ds_id=#{ds_id} and field_type='table_field'
+    </update>
+
+    <update id="set_not_this_datasource_field_false">
+        update v_datasource_field set is_deleted=true where ds_id=#{ds_id} and field_type in ('table_field','flow_field')
+    </update>
+
+    <select id="get_all_enable_counting_views" resultType="java.util.Map">
+        select a.id ds_id,a.obj_type
+             ,case when b.id is not null then b.id else c.id end view_id
+             ,case when b.name is not null then b.name else c.name end view_name
+        from v_datasource a
+                 left join v_view c on a.obj_id=c.id and a.obj_type='view'
+                 left join v_comp_grid g on a.obj_id=g.id and a.obj_type='comp_grid'
+                 left join v_view b on g.obj_id=b.id and g.obj_type='view'
+        where  a.obj_type in ('view', 'comp_grid') and a.enable_counting=true
+    </select>
+
+    <select id="get_view_group" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT *
+            FROM v_view WHERE id = #{view_id}
+            UNION
+            SELECT e.*
+            FROM v_view e
+                     INNER JOIN rec_table s ON s.parent_id = e.id
+        )
+        SELECT a.* FROM rec_table a
+        where a.view_type='group' order by a.ord
+    </select>
+
+    <select id="get_table_group" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT id, name, parent_id, node_type, ord
+            FROM v_table WHERE id = #{table_id}
+            UNION
+            SELECT e.id, e.name, e.parent_id, e.node_type, e.ord
+            FROM v_table e
+                     INNER JOIN rec_table s ON s.parent_id = e.id
+        )
+        SELECT a.* FROM rec_table a
+        where a.node_type='group' order by a.ord
+    </select>
+
+
+    <select id="get_ds_tables_of_parent" resultType="java.util.Map">
+        ---找到当前view_id对应的group_id
+        WITH RECURSIVE rec_table AS (
+            SELECT *
+            FROM v_table WHERE parent_id = #{parent_id}
+            UNION
+            SELECT e.*
+            FROM v_table e
+                     INNER JOIN rec_table s ON s.id = e.parent_id
+        )
+        select * from rec_table a order by a.ord
+    </select>
+
+    <select id="get_view_parent_page" resultType="java.util.Map">
+        ---找到当前view_id对应的group_id
+        WITH RECURSIVE rec_table AS (
+            SELECT *
+            FROM v_tree_view WHERE id = #{view_id}
+            UNION
+            SELECT
+                e.*
+            FROM v_tree_view e
+                     JOIN rec_table s ON e.id = s.parent_id
+        )
+        select * from rec_table a
+        where a.view_type in ('indexTab','modal','drawer')
+    </select>
+
+    <select id="get_view_parent_folder" resultType="java.util.Map">
+        ---找到当前view_id对应的group_id
+        WITH RECURSIVE rec_table AS (
+            SELECT *
+            FROM v_tree_view WHERE id = #{view_id}
+            UNION
+            SELECT
+                e.*
+            FROM v_tree_view e
+                     JOIN rec_table s ON e.id = s.parent_id
+        )
+        select * from rec_table a
+        where a.view_type in ('folder')
+    </select>
+
+    <select id="get_btn_with_views" resultType="java.util.Map">
+        select * from (
+                          select a.id,a.obj_type,a.name,a.ord
+                               ,case
+                                    when a.obj_type='comp_grid_top_btn' then g.obj_id
+                                    when a.obj_type='comp_grid_col_btn' then cg.obj_id
+                                    else a.obj_id end view_id
+                          from v_exec_obj a
+                                   left join v_comp_grid g on a.obj_id=g.id and a.obj_type in ('comp_grid_top_btn')
+                                   left join v_comp_grid_col c on a.obj_id=c.id and  a.obj_type in ('comp_grid_col_btn')
+                                   left join v_comp_grid cg on c.comp_id=cg.id
+                          where a.obj_type like '%btn%'
+                      ) t where t.view_id is not null
+        order by t.id asc
+    </select>
+
+    <select id="get_view_for_module">
+        select * from v_view where parent_id is not null and view_type!='group'
+    </select>
+
+    <select id="get_sas_system_tables" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT *
+            FROM v_tree_table WHERE id in (select id from v_tree_table where sas_system_id=#{sas_system_id})
+            UNION
+            SELECT e.*
+            FROM v_tree_table e
+                     INNER JOIN rec_table s ON s.id = e.parent_id
+        )
+        SELECT a.*
+        FROM rec_table a where is_deleted = false
+        order by ord
+    </select>
+</mapper>

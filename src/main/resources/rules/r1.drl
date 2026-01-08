@@ -1,0 +1,11 @@
+package com.rules;
+import java.util.Map;
+
+//规则一：所购图书总价在100元以下的没有优惠
+rule "book_discount_1"
+    when
+        $map:Map(["price"] != null && ["do"] == true)
+    then
+        $map.put("result", "ok");
+        System.out.println("成功匹配到规则一：所购图书总价在100元以下的没有优惠");
+end

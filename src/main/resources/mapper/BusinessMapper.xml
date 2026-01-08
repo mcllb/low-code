@@ -1,0 +1,1718 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="tcdx.uap.mapper.BusinessMapper">
+    <select id="getModules" resultType="java.util.Map">
+        select a.* from v_module a
+                            left join v_tree_view t on a.id=t.id
+        where (t.is_deleted is null or t.is_deleted=false ) or a.type='Table' or a.type like 'Comp%'
+    </select>
+
+    <select id="getViewRecrusive" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT *
+            FROM v_view WHERE id = #{view_id}
+            UNION
+            SELECT
+                e.*
+            FROM v_view e
+                     INNER JOIN rec_table s ON s.id = e.parent_id
+        )
+        SELECT a.*
+        FROM rec_table a
+        order by ord
+    </select>
+
+    <select id="getViewTree" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT *
+            FROM v_tree_view WHERE id = #{view_id}
+            UNION
+            SELECT
+                e.*
+            FROM v_tree_view e
+                     INNER JOIN rec_table s ON s.id = e.parent_id
+        )
+        SELECT a.*
+        FROM rec_table a
+        order by ord
+    </select>
+
+    <select id="getParentViewTree" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT *
+            FROM v_tree_view WHERE parent_id = #{view_id}
+            UNION
+            SELECT
+                e.*
+            FROM v_tree_view e
+                     INNER JOIN rec_table s ON s.id = e.parent_id
+                                                   and (e.is_deleted=false or e.is_deleted is null)
+                                                   and (s.is_deleted=false or s.is_deleted is null)
+        )
+        SELECT a.*
+        FROM rec_table a
+        order by ord
+    </select>
+
+    <select id="getManageViewTree" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT *
+            FROM v_tree_view
+            <where>
+            <if test="view_id==null and (user==null or user.user_id!=879 or sas_system_id!=null)">
+                id in (select id from v_tree_view where sas_system_id=#{sas_system_id})
+            </if>
+            <if test="view_id!=null">
+                id=#{view_id}
+            </if>
+            and view_type in ('indexTab','modal','drawer','folder')
+            </where>
+            UNION
+            SELECT
+                e.*
+            FROM v_tree_view e
+            INNER JOIN rec_table s ON s.id = e.parent_id
+                and e.view_type in ('indexTab','modal','drawer','folder')
+                and s.view_type in ('indexTab','modal','drawer','folder')
+        )
+        SELECT a.*
+        FROM rec_table a
+        order by ord
+    </select>
+
+    <select id="getViewsInParentTreeNoJson" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT id, parent_id, view_type, name, is_deleted, ord
+            FROM v_tree_view
+            <where>
+                 id in (select id from v_tree_view where sas_system_id=#{sas_system_id})
+            </where>
+            UNION
+            SELECT
+                e.id, e.parent_id, e.view_type, e.name, e.is_deleted, e.ord
+            FROM v_tree_view e
+                     INNER JOIN rec_table s ON s.id = e.parent_id
+                    and (e.is_deleted=false or e.is_deleted is null)
+                    and (s.is_deleted=false or s.is_deleted is null)
+        )
+        SELECT a.*
+        FROM rec_table a
+        order by ord
+    </select>
+
+
+    <select id="getViewsParents" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT *
+            FROM v_tree_view WHERE id in (<foreach collection="view_ids"  item="id" separator=",">#{id}</foreach>)
+            UNION
+            SELECT
+                e.*
+            FROM v_tree_view e
+                INNER JOIN rec_table s ON s.parent_id = e.id
+        )
+        SELECT a.* FROM rec_table a
+        where a.id not in (<foreach collection="view_ids"  item="id" separator=",">#{id}</foreach>)
+        order by a.ord
+    </select>
+
+    <select id="getViewsAndParentsNoJSON" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT id, parent_id, view_type, name, is_deleted, ord
+            FROM v_tree_view WHERE id in (<foreach collection="view_ids"  item="id" separator=",">#{id}</foreach>)
+            UNION
+            SELECT
+                e.id, e.parent_id, e.view_type, e.name, e.is_deleted, e.ord
+            FROM v_tree_view e
+                INNER JOIN rec_table s ON s.parent_id = e.id
+        )
+        SELECT a.* FROM rec_table a
+        order by a.ord
+    </select>
+
+    <select id="getTableRecrusive" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT *
+            FROM v_tree_table WHERE id = #{table_id}
+            UNION
+            SELECT
+                e.*
+            FROM v_tree_table e
+                     INNER JOIN rec_table s ON s.id = e.parent_id
+        )
+        SELECT a.*
+        FROM rec_table a
+        order by ord
+    </select>
+
+    <select id="getViewRecrusiveByParent" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT *
+            FROM v_view WHERE parent_id = #{parent_id}
+            UNION
+            SELECT
+                e.*
+            FROM v_view e
+                     INNER JOIN rec_table s ON s.id = e.parent_id
+        )
+        SELECT a.*
+             ,b.table_id ds_table_id,q.event_type,q.op,q.condition
+        FROM rec_table a
+                 left join v_datasource b on a.id=b.obj_id and b.obj_type='view'
+                 LEFT JOIN v_comp_events q ON q.view_id=a.id
+        order by ord
+    </select>
+
+    <!-- 获取表的外联关系 -->
+    <select  id="get_table_recurive_relations" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT id,
+                   table_id,
+                   foreign_table_id
+            FROM
+                v_table_rel
+            WHERE
+                table_id = #{table_id}
+            UNION
+            SELECT
+                e.id,
+                e.table_id,
+                e.foreign_table_id
+            FROM
+                v_table_rel e
+                    INNER JOIN rec_table s ON s.foreign_table_id = e.table_id
+        )
+        SELECT a.*,b.table_display_name foreign_table_name
+        FROM  rec_table A
+        join v_table b on a.foreign_table_id=b.id
+                 where foreign_table_id!=#{table_id}
+    </select>
+
+    <!-- 获取数据列 -->
+    <select  id="get_grid_data_col" resultType="java.util.Map">
+        select a.table_id,a.table_col_id,a.field from v_view_grid_col a
+        where a.view_id=#{view_id}
+    </select>
+
+    <select id="get_defined_sql" resultType="java.util.Map">
+        ${data_sql}
+        <include refid="tcdx.uap.mapper.BaseDBMapper.whereCause1" />
+        <if test='order_sql!=null'>
+            ${order_sql}
+        </if>
+    </select>
+
+    <!-- 获取数据 -->
+    <select  id="get_grid_data" resultType="java.util.Map">
+
+        <if test="data_access_scope=='user-posted'">
+            ----用户执行过的
+            with user_posted as (
+                select distinct row_id_ from z_${table_id}_flow where poster_ = #{user_id}
+            )
+        </if>
+        <if test="data_access_scope.contains('group-')">
+            --取组织下的人员
+            WITH RECURSIVE rec_table AS (
+                SELECT * FROM v_group
+                WHERE id in (select group_id from v_user_group where user_id=#{user_id})
+                UNION
+                SELECT e.* FROM v_group e
+                INNER JOIN rec_table s ON s.id = e.parent_id
+            ),
+            group_user as(
+                SELECT distinct b.user_id FROM rec_table a
+                join v_user_group b on a.id=b.group_id
+            )
+        </if>
+        <if test="data_access_scope=='group-posted'">
+            --组织下人员执行过的
+            ,group_posted as (
+            select distinct row_id_
+            from z_${table_id}_flow a
+            join group_user b on a.poster_=b.user_id
+            )
+        </if>
+
+      select * from (
+        select ${table_id}.id_
+        ,${table_id}.id_ z_${table_id}_id
+        ,e.label edge_label_  --当前派发动作
+        ,n.label node_label_  --当前状态
+        ,${table_id}.poster_
+        ,${table_id}.receiver_
+        ,${table_id}.update_user_
+        ,${table_id}.posted_time_  --当前状态的派发时间
+        ,${table_id}.node_  --当前状态的派发时间
+        ,${table_id}.edge_  --当前状态的派发时间
+        ,p.staff_nm poster_staff_nm --当前状态的派发人
+        ,p.phone    poster_phone    --当前状态的派发人电话
+        ,r.staff_nm receiver_staff_nm  --当前状态的接收人
+        ,r.phone    receiver_phone     --当前状态的接收人电话
+        ,c.staff_nm create_user_staff_nm   --创建人
+        ,c.phone    create_user_phone      --创建人电话
+        ,${table_id}.create_time_     --创建时间
+        ,u.staff_nm update_user_staff_nm   --更新人
+        ,u.phone    update_user_phone      --更新人电话
+        ,${table_id}.update_time_     --更新时间
+        --外联表的id[1]
+        <foreach collection="leftJoinForeignTables" item="item" open="" close="" separator="">
+             <if test="table_id==item.sid">,${table_id}.z_${item.pid}_id</if>
+             <!-- 多级外联表的时候，本表是没有二级外联表的id的，此时应用二级外联表中取id_ -->
+             <if test="table_id!=item.sid">,${item.pid}.id_ z_${item.pid}_id</if>
+        </foreach>
+
+        --数据表字段
+        <foreach collection="dataTableCols" item="item" open="" close="" separator="">
+             ,${item.table_id}.${item.field}
+        </foreach>
+<!--        &#45;&#45;选择要显示的动作操作时间-->
+<!--        <foreach collection="selFlowEdgePostedTimeCols" item="item" open="" close="" separator="">-->
+<!--             ,f${item.flow_edge_id}.posted_time_ f${item.flow_edge_id}_${item.flow_field}-->
+<!--        </foreach>-->
+<!--        &#45;&#45;选择要显示的动作操作人信息-->
+<!--        <foreach collection="selFlowEdgePosterCols" item="item" open="" close="" separator="">-->
+<!--             ,f${item.flow_edge_id}p.${item.flow_field_short} f${item.flow_edge_id}_${item.flow_field}-->
+<!--        </foreach>-->
+<!--        <foreach collection="selFlowEdgeReceiverCols" item="item" open="" close="" separator="">-->
+<!--            ,f${item.flow_edge_id}r.${item.flow_field_short} f${item.flow_edge_id}_${item.flow_field}-->
+<!--        </foreach>-->
+        <!-- 涉及到的动作表字段 -->
+        <foreach collection="leftJoinFlowEdgeTables" item="flow_edge_id" open="" close="" separator="">
+            ,${flow_edge_id}.posted_time_ ${flow_edge_id}_posted_time_
+            ,${flow_edge_id}.poster_   ${flow_edge_id}_poster_
+            ,${flow_edge_id}p.staff_nm ${flow_edge_id}_poster_staff_nm
+            ,${flow_edge_id}.receiver_ ${flow_edge_id}_receiver_
+            ,${flow_edge_id}r.staff_nm ${flow_edge_id}_receiver_staff_nm
+        </foreach>
+        from z_${table_id} ${table_id}
+
+        <if test="data_access_scope=='user-posted'">
+            join user_posted user_posted on ${table_id}.id_=user_posted.row_id_
+        </if>
+
+        <if test="data_access_scope=='group-received'">
+            join group_user group_user on ${table_id}.receiver_=group_user.user_id
+        </if>
+
+        <if test="data_access_scope=='group-posted'">
+            join group_user group_user on ${table_id}.id_=group_posted.row_id_
+        </if>
+        --左连接外联表
+        <foreach collection="leftJoinForeignTables" item="item" open="" close="" separator="">
+            left join z_${item.pid} ${item.pid} on ${item.sid}.z_${item.pid}_id=${item.pid}.id_
+        </foreach>
+        --左连接当前node、edge表
+        left join v_flow_node n on ${table_id}.node_ = n.id
+        left join v_flow_edge e on ${table_id}.edge_ = e.id
+        left join v_user r on ${table_id}.receiver_ = r.id
+        left join v_user p on ${table_id}.poster_   = p.id
+        <if test="data_access_scope=='user-received'">
+            and ${table_id}.poster_=#{user_id}
+        </if>
+        left join v_user c on ${table_id}.create_user_  = c.id
+        left join v_user u on ${table_id}.update_user_  = u.id
+        --左连接当前edge表
+        <foreach collection="leftJoinFlowEdgeTables" item="flow_edge_id" open="" close="" separator="">
+            left join z_${table_id}_flow ${flow_edge_id}
+                        on ${table_id}.id_=${flow_edge_id}.row_id_ and ${flow_edge_id}.edge_=#{flow_edge_id}
+            left join v_user ${flow_edge_id}r  on ${flow_edge_id}.receiver_=${flow_edge_id}r.id
+            left join v_user ${flow_edge_id}p  on ${flow_edge_id}.poster_=${flow_edge_id}p.id
+        </foreach>
+        <where>
+            <include refid="tcdx.uap.mapper.BaseDBMapper.whereCause1" />
+            <if test="data_access_scope=='user-created'">
+                and ${table_id}.create_user_=#{user_id}
+            </if>
+            <if test="data_access_scope=='user-received'">
+                and ${table_id}.receiver_=#{user_id}
+            </if>
+            and ${table_id}.time_if_delete_ is null
+            ${where_sql}
+        </where>
+         ${order_sql}
+      ) t
+    </select>
+
+
+
+    <!-- 获取数据 -->
+    <select  id="get_distinct_grid_data" resultType="java.util.Map">
+        select
+
+        <choose>
+            <when test="column == 'poster_' or column == 'receiver_'
+            or column == 'create_user_' or column == 'update_user_'">
+                distinct(${table_id}.${column}) value_, b.staff_nm label_
+            </when>
+            <when test="column == 'edge_'">
+                distinct(${table_id}.${column}) value_, c.label label_
+            </when>
+            <when test="column == 'node_'">
+                distinct(${table_id}.${column}) value_, d.label label_
+            </when>
+            <otherwise>
+                distinct(${table_id}.${column}) value_, ${table_id}.${column} label_
+            </otherwise>
+        </choose>
+
+        from
+        z_${table_id} ${table_id}
+        <if test="column=='poster_'">
+            left join v_user b on b.id = ${table_id}.poster_
+        </if>
+        <if test="column=='receiver_'">
+            left join v_user b on b.id = ${table_id}.receiver_
+        </if>
+        <if test="column=='create_user_'">
+            left join v_user b on b.id = ${table_id}.create_user_
+        </if>
+        <if test="column=='update_user_'">
+            left join v_user b on b.id = ${table_id}.update_user_
+        </if>
+        left join v_flow_edge c on ${table_id}.edge_ = c.id
+        left join v_flow_node d on ${table_id}.node_ = d.id
+
+        <where>
+            <include refid="tcdx.uap.mapper.BaseDBMapper.whereCause1" />
+                and
+            <if test='obj_in_ids.tp=="in"'>
+                ${obj_in_ids.col} in
+                <foreach collection="obj_in_ids.vals" item="value" open="(" close=")" separator=",">
+                    #{value}
+                </foreach>
+            </if>
+            and ${table_id}.time_if_delete_ is null and ${table_id}.${column} is not null
+                <if test="queryList != null">
+                    and ${table_id}.${column} in
+                    <foreach collection="queryList" item="value" open="(" close=")" separator=",">
+                        #{value}
+                    </foreach>
+                </if>
+        </where>
+        limit(20)
+    </select>
+
+    <!-- 获取通知的个数 -->
+    <select id="get_grid_data_total" resultType="java.util.Map">
+        <if test="data_access_scope=='user-posted'">
+            ----用户执行过的
+            with user_posted as (
+                select distinct row_id_ from z_${table_id}_flow where poster_ = #{user_id}
+            )
+        </if>
+        <if test="data_access_scope.contains('group-')">
+            --取组织下的人员
+            WITH RECURSIVE rec_table AS (
+                SELECT * FROM v_group
+                WHERE id in (select group_id from v_user_group where user_id=#{user_id})
+                UNION
+                SELECT e.* FROM v_group e
+                INNER JOIN rec_table s ON s.id = e.parent_id
+            ),
+            group_user as(
+                SELECT distinct b.user_id FROM rec_table a
+                join v_user_group b on a.id=b.group_id
+            )
+        </if>
+        <if test="data_access_scope=='group-posted'">
+            --组织下人员执行过的
+            ,group_posted as (
+                select distinct row_id_
+                from z_${table_id}_flow a
+                join group_user b on a.poster_=b.user_id
+            )
+        </if>
+
+        select count(*) cnt
+        from z_${table_id} t${table_id}
+        <if test="data_access_scope=='user-posted'">
+            join user_posted user_posted on t${table_id}.id_=user_posted.row_id_
+        </if>
+
+        <if test="data_access_scope=='group-received'">
+            join group_user group_user on t${table_id}.receiver_=group_user.user_id
+        </if>
+
+        <if test="data_access_scope=='group-posted'">
+            join group_user group_user on t${table_id}.id_=group_posted.row_id_
+        </if>
+        --左连接外联表
+        --左连接外联表
+        <foreach collection="leftJoinForeignTables" item="item" open="" close="" separator="">
+            left join z_${item.pid} ${item.pid} on ${item.sid}.z_${item.pid}_id=${item.pid}.id_
+        </foreach>
+        --左连接当前node、edge表
+        left join v_label n on t${table_id}.node_ = n.id
+        left join v_label e on t${table_id}.edge_ = e.id
+        left join v_user r on t${table_id}.receiver_ = r.id
+        left join v_user p on t${table_id}.poster_   = p.id
+        <if test="data_access_scope=='user-received'">
+            and t${table_id}.poster_=#{user_id}
+        </if>
+        left join v_user c on t${table_id}.create_user_  = c.id
+        left join v_user u on t${table_id}.update_user_  = u.id
+        --左连接当前edge表
+        <foreach collection="leftJoinFlowEdgeTables" item="flow_edge_id" open="" close="" separator="">
+            left join z_${table_id}_flow f${flow_edge_id}
+            on t${table_id}.id_=f${flow_edge_id}.row_id_ and f${flow_edge_id}.edge_=#{flow_edge_id}
+            left join v_user f${flow_edge_id}r  on f${flow_edge_id}.receiver_=f${flow_edge_id}r.id
+            left join v_user f${flow_edge_id}p  on f${flow_edge_id}.poster_=f${flow_edge_id}p.id
+        </foreach>
+        <where>
+            <if test="data_access_scope=='user-created'">
+                and t${table_id}.create_user_=#{user_id}
+            </if>
+            <if test="data_access_scope=='user-received'">
+                and t${table_id}.receiver_=#{user_id}
+            </if>
+            and t${table_id}.time_if_delete_ is null
+        </where>
+    </select>
+
+    <!-- 获取通知的个数 -->
+    <select id="get_grid_data_count" resultType="java.util.Map">
+        <if test="data_access_scope=='user-posted'">
+            ----用户执行过的
+            with user_posted as (
+            select distinct row_id_ from z_${table_id}_flow where poster_ = #{user_id}
+            )
+        </if>
+        <if test="data_access_scope.contains('group-')">
+            --取组织下的人员
+            WITH RECURSIVE rec_table AS (
+            SELECT * FROM v_group
+            WHERE id in (select group_id from v_user_group where user_id=#{user_id})
+            UNION
+            SELECT e.* FROM v_group e
+            INNER JOIN rec_table s ON s.id = e.parent_id
+            ),
+            group_user as(
+            SELECT distinct b.user_id FROM rec_table a
+            join v_user_group b on a.id=b.group_id
+            )
+        </if>
+        <if test="data_access_scope=='group-posted'">
+            --组织下人员执行过的
+            ,group_posted as (
+            select distinct row_id_
+            from z_${table_id}_flow a
+            join group_user b on a.poster_=b.user_id
+            )
+        </if>
+
+        select count(*) cnt
+        from z_${table_id} t${table_id}
+
+        <if test="data_access_scope=='user-posted'">
+            join user_posted user_posted on t${table_id}.id_=user_posted.row_id_
+        </if>
+
+        <if test="data_access_scope=='group-received'">
+            join group_user group_user on t${table_id}.receiver_=group_user.user_id
+        </if>
+
+        <if test="data_access_scope=='group-posted'">
+            join group_user group_user on t${table_id}.id_=group_posted.row_id_
+        </if>
+        --左连接外联表
+        --左连接外联表
+        <foreach collection="leftJoinForeignTables" item="item" open="" close="" separator="">
+            left join z_${item.pid} ${item.pid} on ${item.sid}.z_${item.pid}_id=${item.pid}.id_
+        </foreach>
+        --左连接当前node、edge表
+        left join v_flow_node n on t${table_id}.node_ = n.id
+        left join v_flow_edge e on t${table_id}.edge_ = e.id
+        left join v_user r on t${table_id}.receiver_ = r.id
+        left join v_user p on t${table_id}.poster_   = p.id
+        <if test="data_access_scope=='user-received'">
+            and t${table_id}.poster_=#{user_id}
+        </if>
+        left join v_user c on t${table_id}.create_user_  = c.id
+        left join v_user u on t${table_id}.update_user_  = u.id
+        --左连接当前edge表
+        <foreach collection="leftJoinFlowEdgeTables" item="flow_edge_id" open="" close="" separator="">
+            left join z_${table_id}_flow f${flow_edge_id}
+            on t${table_id}.id_=f${flow_edge_id}.row_id_ and f${flow_edge_id}.edge_=#{flow_edge_id}
+            left join v_user f${flow_edge_id}r  on f${flow_edge_id}.receiver_=f${flow_edge_id}r.id
+            left join v_user f${flow_edge_id}p  on f${flow_edge_id}.poster_=f${flow_edge_id}p.id
+        </foreach>
+        <where>
+            <if test="data_access_scope=='user-created'">
+                and t${table_id}.create_user_=#{user_id}
+            </if>
+            <if test="data_access_scope=='user-received'">
+                and t${table_id}.receiver_=#{user_id}
+            </if>
+            and t${table_id}.time_if_delete_ is null
+            ${condition_sql}
+        </where>
+    </select>
+
+    <!-- btn_click中的执行动作，包含sql语句，不能传到前台 -->
+    <select id="get_btn_ops" resultType="java.util.Map">
+        select a.*
+        ,b.name view_name
+             ,b.view_type
+             ,b.comp_name
+             -- 数据源、后台、脚本
+        ,case when a.table_id is not null then a.table_id else c.table_id end op_table_id
+        ,e.label src_label
+             ,f.label dst_label
+             ,d.label edge_label
+             ,d.assign_type
+             ,d.label flow_edge_name
+        ,d.defined_type,d.defined_group,d.defined_role,d.defined_post
+        ,d.assign_multi_users,d.assign_required
+        ,d.operator_of_table
+        ,d.operator_of_edge
+        ,e.type src_type,f.type dst_type,d.src,d.dst
+        ,g.field rel_dict_field
+        ,g.rel_dict_id
+        ,j.table_col_id local_ds_field_table_col_id
+        ,j.flow_edge_id local_ds_field_flow_edge_id
+        ,j.flow_field local_ds_field_flow_field
+        ,k.field local_ds_field1
+        ,case
+        when j.field_type='pri_sub_receiver_info' then 'pri_sub_receiver_info'
+        when j.defined_field is not null then j.defined_field
+        when j.table_col_id is not null then k.field
+        when j.flow_edge_id=-1 then j.flow_field
+        when j.flow_edge_id>0 then 'f'||j.flow_edge_id||j.flow_field
+        else '' end from_view_ds_field
+        ,k.name from_view_ds_field_name
+        from v_exec_op a
+        left join v_view b on a.view_id=b.id
+        left join v_datasource c on b.id=c.obj_id and c.obj_type='view'
+        left join v_flow_edge d on a.flow_edge_id=d.id
+        left join v_flow_node e on d.src=e.id
+        left join v_flow_node f on d.dst=f.id
+        left join v_table_col g on d.rel_dict_col_id=g.id   -- 匹配根据字典派单，所在的数据字段
+        left join v_datasource_field j on a.from_view_ds_field_id=j.id --加载本地视图数据源字段
+        left join v_table_col k on j.table_col_id=k.id                --加载本地视图数据源数据表字段
+        where exec_id in
+        <foreach collection="exec_ids"  item="id" open="(" close=")" separator=",">
+            #{id}
+        </foreach>
+        order by ord asc
+    </select>
+
+
+    <select id="get_form_fields" resultType="java.util.Map">
+        SELECT a.*,b.field table_column,b.data_type,b.varchar_size,b.numeric_precision,b.table_id,b.rel_dict_id
+        FROM v_view t
+        join v_form_field a on t.id=a.view_id
+               -- and (a.field is not null or a.table_col_id in (select id from v_table_col t1 where t1.table_id=t.comp_table_id))
+        left join v_table_col b on a.table_col_id=b.id
+        where t.id=#{view_id}
+        order by a.ord
+    </select>
+
+    <select id="get_form_fields_related_flows" resultType="java.util.Map">
+        SELECT c.id op_id,b.id flow_edge_id,b.assign_multi_users,b.assign_required,c.exec_id btn_id
+        FROM v_view t
+         join v_form_field a on t.id=a.view_id
+         join v_exec_op c on a.rel_manual_op_id=c.id
+         join v_flow_edge b on c.flow_edge_id=b.id and b.assign_type='manual'
+        where t.id=#{view_id}
+        order by a.ord
+    </select>
+
+    <select id="get_form_fields1" resultType="java.util.Map">
+        SELECT
+            b.id AS id_,
+            b.field_type,
+            b.name,
+            b.ord,
+            b.field AS table_column,
+            b.data_type,
+            b.varchar_size,
+            b.numeric_precision,
+            b.table_id,
+            a.*
+        FROM
+            v_table_col b
+                LEFT JOIN
+            v_form_field a ON b.id = a.table_col_id AND  a.view_id=#{view_id}
+        where  b.table_id = #{table_id}
+        ORDER BY
+            b.ord;
+    </select>
+
+    <select id="get_depend_col_roles" resultType="java.util.Map">
+        WITH RECURSIVE rec_table AS (
+            SELECT a.*
+            FROM v_table_col a where id in
+            <foreach collection="update_col_ids" item="item" open="(" close=")" separator=",">
+                #{item}
+            </foreach>
+            UNION
+            SELECT
+            e.*
+            FROM v_table_col e
+            INNER JOIN rec_table s ON s.table_id = e.depend_table_id and s.id = e.depend_col_id
+        )
+
+        select a.*,b.field depend_field
+        from (
+            SELECT row_number() over (order by null) rn,a.id,a.name,a.field,a.table_id,a.depend_table_id,a.depend_col_id
+            ,a.depend_type,a.defined_sql
+            FROM rec_table a
+        ) a
+        left join v_table_col b on a.depend_col_id=b.id and a.depend_table_id=b.table_id
+        where a.depend_type is not null
+        order by a.rn
+
+
+
+    </select>
+
+    <select id="get_dict_receivers" resultType="java.util.Map">
+        select a.*,b.staff_nm from (
+            select a.id dict_item_id, a.name dict_name, b.user_id
+                       from v_dict_item a
+                                join v_user_group b on a.rel_group_id = b.group_id and a.rel_type = 'rel-post' and
+                                                       a.rel_post_id = b.post_id
+                       where a.dict_id = #{dict_id}
+                       UNION
+                       select a.id dict_item_id, a.name dict_name, b.user_id
+                       from v_dict_item a
+                                join v_user_role b on a.rel_type = 'rel-role' and a.rel_role_id = b.role_id
+                       where a.dict_id = #{dict_id}
+                       UNION
+                       select a.id dict_item_id, a.name dict_name, c.user_id
+                       from v_dict_item a
+                                join v_role_post b on a.rel_type = 'rel-role' and a.rel_role_id = b.role_id
+                                join v_user_group c on b.post_id = c.post_id and a.rel_group_id = c.group_id
+                       where a.dict_id = #{dict_id}
+        ) a
+        join v_user b on a.user_id=b.id
+        <where>
+            <if test="dict_item_ids!=null and dict_item_ids.size>0">
+                a.dict_item_id in
+                <foreach collection="dict_item_ids" item="id" open="(" close=")" separator=",">#{id}</foreach>
+            </if>
+        </where>
+    </select>
+
+    <update id="set_dict_receivers" parameterType="java.util.Map">
+        with t_dict_item as (
+            select ${dict_field} item_id from z_${table_id} a
+            where a.${dict_field} is not null and a.id_ in
+            <foreach collection="update_ids" item="id" open="(" close=")" separator=",">#{id}</foreach>
+        ),
+        dict_item_user as (
+                 select a.*,b.staff_nm from (
+                    select a.id dict_item_id, a.name dict_name, b.user_id
+                    from v_dict_item a
+                     join t_dict_item t on a.id=t.item_id
+                     join v_user_group b on a.rel_group_id = b.group_id and a.rel_type = 'rel-post' and
+                                            a.rel_post_id = b.post_id
+                    where a.dict_id=#{dict_id}
+                    UNION
+                    select a.id dict_item_id, a.name dict_name, b.user_id
+                    from v_dict_item a
+                     join t_dict_item t on a.id=t.item_id
+                     join v_user_role b on a.rel_type = 'rel-role' and a.rel_role_id = b.role_id
+                    where a.dict_id=#{dict_id}
+                    UNION
+                    select a.id dict_item_id, a.name dict_name, c.user_id
+                    from v_dict_item a
+                     join t_dict_item t on a.id=t.item_id
+                     join v_role_post b on a.rel_type = 'rel-role' and a.rel_post_id = b.role_id
+                     join v_user_group c on b.post_id = c.post_id and a.rel_group_id = c.group_id
+                    where a.dict_id=#{dict_id}
+                ) a
+                join v_user b on a.user_id=b.id
+        )
+        , item_user as(
+            select * from (
+              select t.*,row_number() over (partition by dict_item_id order by null) rn from dict_item_user t
+          ) t where t.rn=1
+        )
+
+        update z_${table_id} a set receiver_ = (
+            select b.user_id from item_user b where a.${dict_field}=b.dict_item_id
+        )
+        where a.id_ in
+        <foreach collection="update_ids" item="id" open="(" close=")" separator=",">#{id}</foreach>
+    </update>
+
+    <!-- 获取指定组织和（角色 或 岗位）对应的人员 -->
+    <select id="get_flow_edge_defined_receivers" resultType="java.util.Map">
+        select a.*,b.staff_nm from (
+            select a.id flow_id, a.label flow_name, b.user_id
+                       from v_flow_edge a
+                                join v_user_group b on a.defined_group = b.group_id and a.defined_type = 'post' and
+                                                       a.defined_post = b.post_id
+                       where a.id = #{flow_edge_id}
+                       UNION
+                       select a.id flow_id, a.label flow_name, b.user_id
+                       from v_flow_edge a
+                                join v_user_role b on a.defined_type = 'role' and a.defined_role = b.role_id
+                       where a.id = #{flow_edge_id}
+                       UNION
+                       select a.id flow_id, a.label flow_name, c.user_id
+                       from v_flow_edge a
+                                join v_role_post b on a.defined_type = 'role' and a.defined_role = b.role_id
+                                join v_user_group c on b.post_id = c.post_id and a.defined_group = c.group_id
+                       where a.id = #{flow_edge_id}
+                       ) a
+        join v_user b on a.user_id=b.id
+    </select>
+
+    <delete id="delete_old_flow" parameterType="java.util.Map">
+        delete from z_${table_id}_flow where (row_id_,edge_) in (
+            select id_,edge_ from z_${table_id} where id_ in
+            <foreach collection="row_ids" item="id" open="(" close=")" separator=",">#{id}</foreach>
+        )
+    </delete>
+
+    <insert id="add_new_flow" parameterType="java.util.Map">
+        insert into z_${table_id}_flow (row_id_,prev_node_,edge_,node_,poster_,posted_time_,receiver_)
+        select a.id_,a.prev_node_,a.edge_,a.node_,a.poster_,a.posted_time_,a.receiver_
+        from z_${table_id} a
+        where a.id_ in
+        <foreach collection="row_ids" item="id" open="(" close=")" separator=",">#{id}</foreach>
+    </insert>
+
+    <!-- 根据row_id_取值，当前节点最新的一条记录，更新finished_time -->
+    <update id="set_log_finished_time" parameterType="java.util.Map">
+        update z_${table_id}_log set finished_time_ = #{finished_time_}
+        where id_ in (
+            select id_ from  (
+                   SELECT a.id_,a.row_id_, row_number() over (partition by a.row_id_ order by case when action_type_ like '%complete%' then 0 else 1 end asc) rn
+                   FROM z_${table_id}_log a
+                   where a.row_id_ in
+                   <foreach collection="row_ids" item="id" open="(" close=")" separator=",">#{id}</foreach>
+                   and finished_time_ is null and a.node_=#{prev_node_}
+               ) t where t.rn=1
+        )
+    </update>
+
+    <insert id="add_table_log" parameterType="java.util.Map">
+        insert into z_${table_id}_log (
+        row_id_,prev_node_,edge_,node_,receiver_,poster_,posted_time_,create_user_,create_time_,update_user_,update_time_,time_if_delete_,finished_time_
+        <foreach collection="fields" item="field" open="" close="" separator="">,${field}</foreach>
+        <foreach collection="logInfo.keys" item="key" open="" close="" separator="">,${key}</foreach>
+        )
+        select
+        id_,prev_node_,edge_,node_,receiver_,poster_,posted_time_,create_user_,create_time_,update_user_,update_time_,time_if_delete_,finished_time_
+        <foreach collection="fields" item="field" open="" close="" separator="">,${field}</foreach>
+        <foreach collection="logInfo.values" item="value" open="" close="" separator="">,#{value}</foreach>
+        from z_${table_id}
+        where id_ in
+        <foreach collection="row_ids" item="id" open="(" close=")" separator=",">#{id}</foreach>
+    </insert>
+
+    <select id="get_gate_edges" resultType="java.util.Map">
+        With RECURSIVE rec_table AS (
+            SELECT *
+            FROM v_flow_edge WHERE id = #{flow_edge_id}
+            UNION
+            SELECT
+                e.*
+            FROM v_flow_edge e
+            INNER JOIN rec_table s ON s.dst = e.src  and (e.is_deleted is null or e.is_deleted=false)
+        )
+
+        SELECT a.*
+             ,b.type src_type,b.label src_label
+             ,c.type dst_type,c.label dst_label
+             ,d.field cfield1
+             ,e.field cfield2
+             ,f.field value_field1
+             ,g.field value_field2
+        FROM rec_table a
+                 join v_flow_node b on a.src=b.id
+                 join v_flow_node c on a.dst=c.id
+                 left join v_table_col d on a.condition_field1 = d.id
+                 left join v_table_col e on a.condition_field2 = e.id
+                 left join v_table_col f on a.condition_value_from_col1 = f.id
+                 left join v_table_col g on a.condition_value_from_col2 = g.id
+        order by a.ord
+    </select>
+
+
+    <select id="get_undeleted_flow_node" resultType="java.util.Map">
+        with edge as (
+            select distinct e.*
+            from v_flow_edge e
+                     join v_flow_node s on e.src=s.id and (s.is_deleted is null or s.is_deleted=false)
+                     join v_flow_node d on e.dst=d.id and (d.is_deleted is null or d.is_deleted=false)
+            where e.is_deleted is null or e.is_deleted=false
+        <if test="table_id !=null" >and e.table_id=#{table_id}</if>
+        )
+        select n.* from v_flow_node n
+        where  (n.is_deleted is null or n.is_deleted=false)
+        <if test="table_id !=null" >and n.table_id=#{table_id}</if>
+          and n.id in ( select src from edge union select dst from edge )
+    </select>
+
+    <select id="get_undeleted_flow_edge" resultType="java.util.Map">
+        select distinct e.*
+        from v_flow_edge e
+         join v_flow_node s on e.src=s.id and (s.is_deleted is null or s.is_deleted=false)
+         join v_flow_node d on e.dst=d.id and (d.is_deleted is null or d.is_deleted=false)
+        where e.is_deleted is null or e.is_deleted=false
+        <if test="table_id !=null" >and e.table_id=#{table_id}</if>
+        order by e.ord
+    </select>
+
+    <select id="get_undeleted_update_sql_edge" resultType="java.util.Map">
+        select a.*,b.label src_label,c.label dst_label
+        from v_flow_edge a
+        join v_flow_node b on a.src=b.id and (b.is_deleted is null or b.is_deleted=false)
+        join v_flow_node c on a.dst=c.id and (c.is_deleted is null or c.is_deleted=false)
+        where (a.is_deleted is null or a.is_deleted=false)
+          and (
+            a.src in (select id from v_flow_node where type='update-sql')
+                or a.dst in (select id from v_flow_node where type='update-sql')
+            )
+    </select>
+
+    <select id="get_recur_trans" resultType="java.util.Map">
+        With RECURSIVE rec_table AS (
+            SELECT a.id,a.label,b.dst,a.upd_sql
+            FROM v_flow_node a
+                     left join v_flow_edge b on a.id=b.src and (b.is_deleted is null or b.is_deleted=false)
+            WHERE a.id = #{flow_node_id}
+            UNION
+            SELECT a.id,a.label,b.dst,a.upd_sql
+            FROM v_flow_node a
+                     left join v_flow_edge b on a.id=b.src and (b.is_deleted is null or b.is_deleted=false)
+                     INNER JOIN rec_table s ON s.dst = a.id
+        )
+        SELECT a.*
+        FROM rec_table a
+    </select>
+
+    <select id="set_table_flow_rows_by_edge" resultType="java.util.Map">
+        with z_table_edge as (
+        select * from z_${operator_of_table}_flow a
+        where a.row_id_ in <foreach collection="operator_of_table_ids" item="id" separator="," open="(" close=")">#{id}</foreach>
+        and edge_ = #{operator_of_edge}
+        )
+        <if test="op_table_id==operator_of_table">
+        update z_${op_table_id} a set receiver_=b.${receiver_or_poster}
+        from z_table_edge b
+        where b.row_id_=a.id_
+        </if>
+        <if test="op_table_id!=operator_of_table">
+        update z_${op_table_id} a set receiver_=b.${receiver_or_poster}
+        from z_table_edge b
+        where b.row_id_=a.z_${operator_of_table}_id
+        and a.id_ in <foreach collection="op_table_ids" item="id" separator="," open="(" close=")">#{id}</foreach>
+        </if>
+    </select>
+
+    <select id="get_grid_flow_btns" resultType="java.util.Map">
+        select a.id node_id,b.*
+        from v_view t
+        join v_flow_node a on t.comp_table_id=a.table_id
+        join v_exec_obj b on a.id=b.obj_id and b.obj_type='flow-node-btn'
+        where t.id=#{view_id}
+        UNION
+        select b.flow_node_id node_id,a.*
+        from v_view t
+        join v_exec_obj a on t.comp_table_id=a.obj_id
+        join v_exec_trg_by_flow_event b on a.id=b.exec_id and b.node_in=true
+        where t.id=#{view_id}
+    </select>
+
+    <select id="get_notice_condition" resultType="java.util.Map">
+        select a.*
+             ,b1.field cfield1,b1.data_type cfield1_type
+             ,b2.field value_field1
+             ,c1.field cfield2,c1.data_type cfield2_type
+             ,c2.field value_field2
+        from v_notice_condition a
+        left join v_table_col b1 on a.condition_field1=b1.id
+        left join v_table_col b2 on a.condition_value_from_col1=b2.id
+        left join v_table_col c1 on a.condition_field1=c1.id
+        left join v_table_col c2 on a.condition_value_from_col1=c2.id
+        where a.table_id=#{table_id}
+    </select>
+
+    <delete id="delete_notice" parameterType="java.util.Map">
+        delete from v_notice where table_id=#{table_id}
+                               and row_id in <foreach collection="ids" item="id" separator="," open="(" close=")">#{id}</foreach>
+    </delete>
+
+    <!-- 更新通知 -->
+    <insert id="add_notice" parameterType="java.util.Map">
+        insert into v_notice (table_id,row_id,node_,edge_, title,user_id,notice_time,poster_,receiver_)
+        select #{table_id}, a.id_, a.node_, a.edge_, '', a.receiver_, #{notice_time}, a.poster_, a.receiver_
+        from z_${table_id} a
+        <where>
+            <if test="ids!=null and ids.size>0">
+                a.id_ in <foreach collection="ids" item="id" separator="," open="(" close=")">#{id}</foreach>
+            </if>
+            <!-- 根据条件，用or连接 -->
+            <if test="noticeContisionList!=null and noticeContisionList.size>0">
+                and
+                <foreach collection="noticeContisionList" item="con" separator="or" open="(" close=")">
+                    <if test="con.edges_str!=null and con.nodes_str!=null and con.condition_limited_count!=null and con.condition_limited_count>0">
+                        1=1
+                        <if test="con.edges_str!='-1'">and edge_ in (${con.edges_str})</if>
+                        <if test="con.nodes_str!='-1'">and node_ in (${con.nodes_str})</if>
+                        <if test="con.condition_limited_count==1">
+                            and ${con.cfield1}${con.condition_operator1}
+                            <if test="con.condition_value_from_type1=='defined-value'">#{con.condition_value1}</if>
+                            <if test="con.condition_value_from_type1=='table-col'">${con.value_field1}</if>
+                         </if>
+                         <if test="con.condition_limited_count==2">
+                         and (
+                            ${con.cfield1}${con.condition_operator1}
+                            <if test="con.condition_value_from_type1=='defined-value'">#{con.condition_value1}</if>
+                            <if test="con.condition_value_from_type1=='table-col'">${con.value_field1}</if>
+                            ${condition_and_or}
+                            ${con.cfield2}${con.condition_operator2}
+                            <if test="con.condition_value_from_type2=='defined-value'">#{con.condition_value2}</if>
+                            <if test="con.condition_value_from_type2=='table-col'">#{con.value_field2}</if>
+                         )
+                         </if>
+                    </if>
+                    <if test="con.edges_str==null or con.nodes_str==null or con.condition_limited_count==null">
+                        and false
+                    </if>
+                </foreach>
+            </if>
+            <if test="noticeContisionList==null or noticeContisionList.size==0">
+                and false
+            </if>
+        </where>
+    </insert>
+
+<!--    <select id="get_notice_cnt" resultType="java.util.Map">-->
+<!--        select-->
+<!--            b.ord,a.id,a.group_id,b.name group_name,a.view_id_in_group view_id,c.name view_name,count(*) cnt-->
+<!--&#45;&#45;a.*,b.name group_name,c.name view_name,d.obj_type,e.row_id,e.node_,e.edge_,e.notice_time-->
+<!--        from v_view_notice_group a-->
+<!--                 join v_view b on a.group_id=b.id-->
+<!--                 join v_view c on a.view_id_in_group=c.id-->
+<!--                 join v_view_notice_flow_condition d on a.view_id_in_group=d.view_id-->
+<!--                 join v_notice e on d.table_id=e.table_id and ((d.obj_id=e.edge_ and d.obj_type='edge') or ( d.obj_id=-1 and d.obj_type='edge') )-->
+<!--        where e.user_id=#{user_id} and a.view_id=#{view_id}-->
+<!--        group by b.ord,a.id,a.group_id,b.name,a.view_id_in_group,c.name-->
+<!--        order by b.ord-->
+
+<!--    </select>-->
+
+    <select id="get_grid_view_info" resultType="java.util.Map">
+        SELECT
+              b.*
+             ,c.field notice_cfield1,c.data_type cfield1_type,d.field notice_value_field1
+             ,e.field notice_cfield2,e.data_type cfield2_type,f.field notice_value_field2
+        FROM  v_view b
+                 left join v_table_col c on b.notice_condition_field1=c.id
+                 left join v_table_col d on b.notice_condition_value_from_col1=d.id
+                 left join v_table_col e on b.notice_condition_field2=e.id
+                 left join v_table_col f on b.notice_condition_value_from_col2=f.id
+           ,b1.field cfield1,b1.data_type cfield1_type
+           ,b2.field value_field1
+           ,c1.field cfield2,c1.data_type cfield2_type
+           ,c2.field value_field2
+            from v_notice_condition a
+        left join v_table_col b1 on a.condition_field1=b1.id
+            left join v_table_col b2 on a.condition_value_from_col1=b2.id
+            left join v_table_col c1 on a.condition_field1=c1.id
+        where b.id=#{view_id}
+    </select>
+
+    <select id="get_root_id" resultType="java.lang.Integer">
+        WITH RECURSIVE RootFinder AS (
+            -- 初始查询部分，从给定节点开始
+            SELECT id, parent_id
+            FROM ${table_name}
+            WHERE id = #{id}
+
+            UNION ALL
+
+            -- 递归查询部分，递归查找父节点
+            SELECT v.id, v.parent_id
+            FROM ${table_name} v
+                     INNER JOIN RootFinder rf ON v.id = rf.parent_id
+        )
+-- 从递归结果中选择根节点（根节点的 parent_id 为 NULL）
+        SELECT id FROM RootFinder
+        WHERE parent_id IS NULL or parent_id=0;
+
+    </select>
+
+    <select id="get_all_id_by_root_id" resultType="java.util.Map">
+        WITH RECURSIVE Descendants AS (
+            SELECT id, parent_id FROM v_view WHERE parent_id = #{id}
+            UNION ALL
+            SELECT v.id, v.parent_id FROM v_view v JOIN Descendants d ON d.id = v.parent_id
+        )
+        SELECT * FROM Descendants
+    </select>
+
+    <select id="get_all_view_flow_config" resultType="java.util.Map">
+        SELECT b.*,c.name,e.label,f.label 前,g.label 后,f.src FROM v_exec_obj a
+        LEFT JOIN  v_exec_op b  ON a.id=b.exec_id
+        LEFT JOIN v_view c on   c.id=b.view_id
+        LEFT JOIN v_flow_edge e ON e.id=b.flow_edge_id
+        LEFT JOIN v_flow_edge f ON f.id=e.src
+        LEFT JOIN v_flow_edge g ON g.id=e.dst
+        WHERE b.op_type='receivers-insert-complete'
+        AND (b.view_id in
+        <foreach collection="ids" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+         OR b.table_id= #{table_id})
+    </select>
+
+    <select id="get_value_renders_of_objs" resultType="java.util.Map">
+        select b.*,c.ds_id c_ds_id
+        ,c.table_col_id,c.flow_edge_id,c.flow_field
+        ,d.data_type,d.rel_dict_id,d.table_id,d.field col_field
+        ,case
+            when c.field_type='pri_sub_receiver_info' then 'pri_sub_receiver_info'
+            when c.defined_field is not null then c.defined_field
+            when c.table_col_id is not null then d.field
+            when c.flow_edge_id=-1 then c.flow_field
+            when c.flow_edge_id>0 then 'f'||c.flow_edge_id||c.flow_field
+            else '' end field
+        ,e.obj_type ds_obj_type
+        ,f.view_type ds_view_type,f.comp_name ds_comp_name
+        from  v_comp_value_render b
+        left join v_datasource_field c on c.id=b.ds_field_id
+        left join v_table_col d on d.id=c.table_col_id
+        left join v_datasource e on e.id=c.ds_id     --关联数据源
+        left join v_view f on f.id=e.obj_id
+        WHERE b.obj_type=#{obj_type} and b.obj_id in
+        <foreach collection="obj_ids" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </select>
+
+
+    <select id="get_value_editors_of_objs" resultType="java.util.Map">
+        select b.*,c.ds_id c_ds_id
+        ,c.table_col_id,c.flow_edge_id,c.flow_field
+        ,d.data_type,d.rel_dict_id,d.table_id,d.field col_field
+        ,case
+        when c.field_type='pri_sub_receiver_info' then 'pri_sub_receiver_info'
+        when c.defined_field is not null then c.defined_field
+        when c.table_col_id is not null then d.field
+        when c.flow_edge_id=-1 then c.flow_field
+        when c.flow_edge_id>0 then 'f'||c.flow_edge_id||c.flow_field
+        else '' end field
+        ,e.obj_type ds_obj_type
+        ,f.view_type ds_view_type,f.comp_name ds_comp_name
+        from  v_comp_value_editor b
+        left join v_datasource_field c on c.id=b.ds_field_id
+        left join v_table_col d on d.id=c.table_col_id
+        left join v_datasource e on e.id=c.ds_id     --关联数据源
+        left join v_view f on f.id=e.obj_id
+        WHERE b.obj_type=#{obj_type} and b.obj_id in
+        <foreach collection="obj_ids" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </select>
+
+    <select id="get_user_selectors_of_views" resultType="java.util.Map">
+        SELECT a.*
+        ,b.flow_edge_id
+        ,d.obj_id exec_obj_id
+        ,d.obj_type exec_obj_type
+        ,c.assign_multi_users,c.assign_required,c.assign_type
+        FROM v_comp_user_selector a
+        left join v_exec_op b on a.exec_op_id=b.id
+        left join v_exec_obj d on b.exec_id=d.id
+        left join v_flow_edge c on b.flow_edge_id=c.id
+        WHERE a.obj_type=#{obj_type} and a.obj_id in
+        <foreach collection="obj_ids" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </select>
+
+    <select id="get_all_user_selectors_of_views" resultType="java.util.Map">
+        SELECT a.*
+        ,b.flow_edge_id
+        ,c.assign_multi_users,c.assign_required,c.assign_type
+        FROM v_comp_user_selector a
+        left join v_exec_op b on a.exec_op_id=b.id
+    </select>
+
+    <select id="get_table_datasource_fields" resultType="java.util.Map">
+        SELECT t1.id view_id,t1.name view_name
+             ,a.*
+             ,t2.table_display_name
+             ,case
+                when a.field_type='ds_total' then 'ds_total'
+                when a.field_type='ds_count' then 'ds_count'
+                when a.field_type='pri_sub_receiver_info' then 'pri_sub_receiver_info'
+                when a.field_type='defined_field' then a.defined_field
+                when a.field_type='table_field' then b.field
+                when a.field_type='flow_field' and a.flow_edge_id=-1 then a.flow_field
+                when a.field_type='flow_field' and  a.flow_edge_id>0 then 'f'||a.flow_edge_id||a.flow_field
+                else '' end field
+             ,b.name,b.data_type,b.rel_dict_id
+             ,c.label edge_label
+             ,d.label src_label
+             ,e.label dst_label
+        FROM v_datasource t
+        left join v_view t1 on t.obj_id=t1.id and t.obj_type='view'
+        join v_datasource_field a on t.id=a.ds_id and a.is_deleted=false
+        left join v_table_col b on a.table_col_id=b.id
+        left join v_table t2 on b.table_id=t2.id
+        left join v_flow_edge c on a.flow_edge_id=c.id
+        left join v_flow_node d on c.src=d.id
+        left join v_flow_node e on c.dst=e.id
+        where t.id=#{ds_id} and a.field_type in ('ds_total','ds_count', 'table_field','flow_field', 'pri_sub_receiver_info')
+        order by a.table_col_id,a.flow_edge_id
+    </select>
+
+    <select id="get_defined_datasuorce_fields" resultType="java.util.Map">
+        select a.*
+         ,case
+              when a.field_type='pri_sub_receiver_info' then 'pri_sub_receiver_info'
+              when a.field_type='ds_total' then 'ds_total'
+              when a.field_type='ds_count' then 'ds_count'
+              when a.field_type='defined_field' then a.defined_field
+              else '' end field
+        from v_datasource_field  a
+        where  a.ds_id=#{ds_id} and a.field_type in ('ds_total','ds_count','defined_field', 'pri_sub_receiver_info')
+            and (a.is_deleted is null or a.is_deleted=false)
+    </select>
+
+    <select id="get_datasource_info" resultType="java.util.Map">
+        SELECT t.*
+        FROM v_datasource t
+        where
+            <if test="obj_id!=null">
+            t.obj_id=#{obj_id} and t.obj_type=#{obj_type}
+            </if>
+            <if test="ds_id!=null">
+                t.id=#{ds_id}
+            </if>
+    </select>
+
+    <select id="get_ds_fields_attr" resultType="java.util.Map">
+        select b.*,b.id ds_field_id
+        ,c.field col_field,c.table_id,c.data_type,c.rel_dict_id
+        ,case
+            when b.defined_field is not null then b.defined_field
+            when b.table_col_id is not null then c.field
+            when b.flow_edge_id=-1 then b.flow_field
+            when b.flow_edge_id>0 then 'f'||b.flow_edge_id||b.flow_field
+            else '' end field
+        from v_datasource_field b
+        join v_datasource ds on b.ds_id=ds.id
+        left join v_table_col c on b.table_col_id=c.id
+        where is_deleted=false and
+        <if test="ds_id!=null">b.ds_id=#{ds_id} </if>
+        <if test="ds_field_ids!=null">b.id in
+            <foreach collection="ds_field_ids" item="value" open="(" close=")" separator=",">
+                #{value}
+            </foreach>
+        </if>
+    </select>
+
+    <select id="get_comp_test_of_obj_type"  resultType="java.util.Map">
+        select b.*
+             ,c.table_col_id,c.flow_edge_id,c.flow_field
+             ,d.data_type
+             ,d.rel_dict_id
+             ,d.table_id
+             ,d.field col_field
+             ,case when c.defined_field is not null then c.defined_field
+                   when c.table_col_id>0 then d.field
+                   when c.flow_edge_id=-1 then c.flow_field
+                   when c.flow_edge_id>0 then 'f'||c.flow_edge_id||c.flow_field
+                   else '' end field
+        from  v_comp_test1 b
+                  left join v_datasource_field c on c.id=b.ds_field_id
+                  left join v_table_col d on d.id=c.table_col_id
+        where b.obj_id=#{obj_id} and b.obj_type=#{obj_type}
+    </select>
+
+
+    <select id="get_execs_of_obj_type" resultType="java.util.Map">
+        select a.*,b.id scope_id,b.contains_all_groups,b.contains_all_roles_posts
+        from v_exec_obj a
+        left join v_user_scope b on a.id=b.obj_id and a.obj_type=b.obj_type
+        where a.obj_id in
+        <foreach collection="obj_ids" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+        <if test="obj_type!=null">
+            and a.obj_type=#{obj_type}
+        </if>
+        order by a.ord
+    </select>
+
+    <select id="get_default_flow_of_node" resultType="java.util.Map">
+        select * from (
+        select
+        a.id_ row_id_
+        ,b.id flow_edge_id
+        ,b.*
+        ,c.type dst_type
+        ,row_number() over (partition by a.id_ order by b.ord asc) rn
+        from z_${op_table_id} a
+        join v_flow_edge b on a.node_=b.src
+        join v_flow_node c on b.dst=c.id
+        where a.id_ in
+        <foreach collection="ids" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+        ) t where t.rn=1
+    </select>
+
+    <!-- 获取子流程的数量 -->
+    <select id="get_sub_flow_counts" resultType="java.util.Map">
+        select z_${pri_table_id}_id
+        ,count(*) cnt
+        from z_${sub_table_id} a
+        where z_${pri_table_id}_id in
+        <foreach collection="pri_ids" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+        group by z_${pri_table_id}_id
+    </select>
+
+    <!-- 获取子流程的flow清单及处理情况-->
+    <select id="get_sub_flow_handle_info" resultType="java.util.Map">
+        select a.id_
+        ,a.poster_
+        ,a.receiver_
+        ,a.posted_time_ received_time_
+        ,u.staff_nm receiver_staff_nm
+        ,b.id nxt_edge
+        ,b.dst nxt_node
+        ,c.posted_time_ finished_time_
+        from z_${sub_table_id}_flow a
+        join v_user u on a.receiver_=u.id
+        --环节的下一个动作
+        left join v_flow_edge b on a.node_=b.src
+                                and (b.is_deleted=false or b.is_deleted=null)
+        --环节的下一个节点
+        left join z_${sub_table_id}_flow c on b.dst=c.node_
+                                and c.posted_time_>=a.posted_time_ and a.row_id_=c.row_id_
+        where a.row_id_ in (
+            select id_ from z_${sub_table_id} s
+            where s.z_${pri_table_id}_id in
+            <foreach collection="pri_ids" item="value" open="(" close=")" separator=",">
+                #{value}
+            </foreach>
+            and s.pri_node_times=#{pri_node_times}
+        )
+        and a.node_=#{when_sub_node}
+    </select>
+
+
+    <select id="get_pri_table_flow_info" resultType="java.util.Map">
+        select
+        p.id_ z_${pri_table_id}_id
+        ,e.src,e.dst
+        ,s.label src_label
+        ,e.label edge_label
+        ,d.label dst_label
+        ,p.node_
+        ,s.type src_type
+        ,d.type dst_type
+        ,u.staff_nm pri_receiver
+        from z_${pri_table_id} p
+        join v_flow_edge e on p.edge_=e.id
+        join v_flow_node s on e.src=s.id
+        join v_flow_node d on e.dst=d.id
+        left join v_user u on p.receiver_=u.id
+        where p.id_ in
+        <foreach collection="pri_ids" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </select>
+
+    <select id="get_pri_table_sub_node_info" resultType="java.util.Map">
+        --当前接单信息
+        select
+          p.id_ pri_table_id
+         ,s.id_ sub_table_id
+         ,p.id_ z_${pri_table_id}_id
+         ,psrc.label pri_src_label
+         ,pe.label pri_edge_label
+         ,pn.label pri_node_label
+         ,p.node_ pri_node
+         ,pn.type pri_node_type
+         ,pu.staff_nm pri_receiver
+         ,s.id_ z_${sub_table_id}_id
+         ,sn.label sub_node_label
+         ,s.node_ sub_node
+         ,su.staff_nm sub_receiver
+         ,s.pri_table_id
+         ,s.pri_node
+         ,s.pri_node_times
+        from z_${pri_table_id} p
+         join v_flow_node pn on p.node_=pn.id
+         join v_flow_edge pe on p.edge_=pe.id
+         join v_flow_node psrc on pe.src=psrc.id
+         left join v_user pu on p.receiver_=pu.id
+         left join z_${sub_table_id} s on p.id_=s.z_${pri_table_id}_id
+                                            and s.time_if_delete_ is null
+                                            and s.${subNodeField}=p.node_
+         left join v_flow_node sn on s.node_=sn.id
+         left join v_user su on s.receiver_=su.id
+        where p.id_ in
+        <foreach collection="pri_ids" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+        order by p.id_
+    </select>
+
+    <!-- 根据行ids，获取当前流程的接单人信息 -->
+    <select id="get_pri_cur_receive_info" resultType="java.util.Map">
+        ---- 当前接单人、子流程接单人、所在环节、到岗时间及处理时间。
+        select
+        p.id_
+        ,p.id_ z_${pri_table_id}_id
+        ,p.posted_time_
+        ,psrc.label src_label
+        ,pe.label edge_label
+        ,pn.label node_label
+        ,pn.label dst_label
+        ,p.node_
+        ,pn.type node_type
+        ,pu.staff_nm poster_staff_nm
+        ,ru.staff_nm receiver_staff_nm
+        from z_${pri_table_id} p
+        left join v_flow_node pn on p.node_=pn.id
+        left join v_flow_edge pe on p.edge_=pe.id
+        left join v_flow_node psrc on pe.src=psrc.id
+        left join v_user pu on p.poster_=pu.id
+        left join v_user ru on p.receiver_=ru.id
+        where p.id_ in
+        <foreach collection="pri_ids" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </select>
+
+    <!-- 根据行ids，获取当前流程的接单人信息 -->
+    <select id="get_pri_rel_sub_receive_info" resultType="java.util.Map">
+        with sub_flows as (
+            select
+            s.id_ z_${sub_table_id}_id
+            ,s.z_${pri_table_id}_id
+            ,s.id_ sub_id_
+            ,s.z_${pri_table_id}_id pri_tbl_id_
+            ,se.src
+            ,ssrc.type src_type
+            ,se.dst
+            ,sdst.type dst_type
+            ,ssrc.label src_label
+            ,se.label edge_label
+            ,sdst.label dst_label
+            ,s.posted_time_
+            ,s.poster_
+            ,s.receiver_
+            ,su.staff_nm receiver_staff_nm
+            ,sp.staff_nm poster_staff_nm
+            ,s.pri_tbl_node_
+            ,s.pri_tbl_
+            ,s.pri_tbl_node_finished_
+            ,s.pri_tbl_node_enter_times_
+            from z_${sub_table_id} s
+            join v_flow_edge se on s.edge_=se.id
+            join v_flow_node ssrc on ssrc.id=se.src
+            join v_flow_node sdst on sdst.id=se.dst
+            left join v_user su on s.receiver_=su.id
+            left join v_user sp on s.poster_=sp.id
+            where
+            s.z_${pri_table_id}_id in
+            <foreach collection="pri_ids" item="value" open="(" close=")" separator=",">
+                #{value}
+            </foreach>
+        )
+        select a.* from sub_flows a
+        where (a.pri_tbl_id_,a.pri_tbl_node_,a.pri_tbl_node_enter_times_) in (
+            select pri_tbl_id_,pri_tbl_node_,max(pri_tbl_node_enter_times_)
+            from sub_flows
+            group by pri_tbl_id_,pri_tbl_node_
+        )
+
+    </select>
+
+<!--    <select id="get_sub_tables_for_get_rows" resultType="java.util.Map">-->
+<!--        select a.sub_flow_table_id, b.table_display_name sub_table_name-->
+<!--        from v_flow_node a-->
+<!--        join v_table b on a.sub_flow_table_id=b.id-->
+<!--        where a.id in-->
+<!--        <foreach collection="pri_nodes" item="value" open="(" close=")" separator=",">-->
+<!--            #{value}-->
+<!--        </foreach>-->
+<!--    </select>-->
+
+    <select id="get_pri_tables" resultType="java.util.Map">
+        select a.*
+             ,b.table_display_name sub_table_name
+        from v_table_rel a
+                 join v_table b on a.table_id=b.id
+        where a.foreign_table_id=#{pri_table_id}
+    </select>
+
+    <select id="get_sub_flow_event_of_pri" resultType="java.util.Map">
+        select a.*
+             ,b.table_display_name pri_table_name,c.label pri_node_label
+             ,d.table_display_name sub_table_name,e.label sub_node_label
+        from v_flow_node_event a
+        join v_table b on a.pri_table_id=b.id
+        join v_flow_node c on a.pri_node=c.id
+        join v_table d on a.sub_table_id=d.id
+        join v_flow_node e on a.when_sub_node=e.id
+        <where>
+            <if test="node_type=='user-task' or node_type=='end'">
+                and a.sub_table_id=#{table_id} and a.when_sub_node=#{node}
+            </if>
+            <if test="node_type=='sub-flow'">
+                (a.sub_table_id=#{table_id} and a.when_sub_node=#{node})
+                or
+                (a.pri_table_id=#{table_id} and a.pri_node=#{node} and a.sub_table_id=#{sub_table_id})
+            </if>
+        </where>
+        order by a.ord
+    </select>
+
+    <select id="get_comp_log_cfg" resultType="java.util.Map">
+        select a.id,a.obj_id from v_comp_log_table a
+        where a.obj_id = #{id}
+    </select>
+
+    <select id="get_this_log_table_data" resultType="java.util.Map">
+        select t${table_id}.id_
+        ,e.label edge_label_  --当前派发动作
+        ,n.label node_label_  --当前状态
+        ,t${table_id}.poster_
+        ,t${table_id}.receiver_
+        ,t${table_id}.update_user_
+        ,t${table_id}.posted_time_  --当前状态的派发时间
+        ,t${table_id}.node_  --当前状态的派发时间
+        ,t${table_id}.edge_  --当前状态的派发时间
+        ,p.staff_nm poster_staff_nm --当前状态的派发人
+        ,p.phone    poster_phone    --当前状态的派发人电话
+        ,r.staff_nm receiver_staff_nm  --当前状态的接收人
+        ,r.phone    receiver_phone     --当前状态的接收人电话
+        ,c.staff_nm create_user_staff_nm   --创建人
+        ,c.phone    create_user_phone      --创建人电话
+        ,t${table_id}.create_time_     --创建时间
+        ,u.staff_nm update_user_staff_nm   --更新人
+        ,u.phone    update_user_phone      --更新人电话
+        ,t${table_id}.update_time_     --更新时间
+
+        --数据表字段
+        <foreach collection="dataTableCols" item="item" open="" close="" separator="">
+            <if test="item.containsKey('table_id') and item.table_id != null">
+                 ,t${item.table_id}.${item.field}
+             </if>
+        </foreach>
+
+        from z_${table_id}_log t${table_id}
+
+        --左连接当前node、edge表
+        left join v_flow_node n on t${table_id}.node_ = n.id
+        left join v_flow_edge e on t${table_id}.edge_ = e.id
+        -- receiver_
+        left join v_user r on t${table_id}.receiver_ = r.id
+        -- poster_
+        left join v_user p on t${table_id}.poster_   = p.id
+        -- creater_
+        left join v_user c on t${table_id}.create_user_  = c.id
+        -- updater
+        left join v_user u on t${table_id}.update_user_  = u.id
+
+        where t${table_id}.row_id_ = ${id_} and  t${table_id}.action_type_='complete'
+    </select>
+
+    <select id="get_this_log_table_detail" resultType="java.util.Map">
+        select t${table_id}.id_
+        ,e.label edge_label_  --当前派发动作
+        ,n.label node_label_  --当前状态
+        ,t${table_id}.poster_
+        ,t${table_id}.receiver_
+        ,t${table_id}.update_user_
+        ,t${table_id}.posted_time_  --当前状态的派发时间
+        ,t${table_id}.node_  --当前状态的派发时间
+        ,t${table_id}.edge_  --当前状态的派发时间
+        ,p.staff_nm poster_staff_nm --当前状态的派发人
+        ,p.phone    poster_phone    --当前状态的派发人电话
+        ,r.staff_nm receiver_staff_nm  --当前状态的接收人
+        ,r.phone    receiver_phone     --当前状态的接收人电话
+        ,c.staff_nm create_user_staff_nm   --创建人
+        ,c.phone    create_user_phone      --创建人电话
+        ,t${table_id}.create_time_     --创建时间
+        ,u.staff_nm update_user_staff_nm   --更新人
+        ,u.phone    update_user_phone      --更新人电话
+        ,t${table_id}.update_time_     --更新时间
+
+        --数据表字段
+        <foreach collection="dataTableCols" item="item" open="" close="" separator="">
+            <if test="item.containsKey('table_id') and item.table_id != null">
+            ,t${item.table_id}.${item.field}
+            </if>
+        </foreach>
+
+        from z_${table_id}_log t${table_id}
+
+        --左连接当前node、edge表
+        left join v_flow_node n on t${table_id}.node_ = n.id
+        left join v_flow_edge e on t${table_id}.edge_ = e.id
+        -- receiver_
+        left join v_user r on t${table_id}.receiver_ = r.id
+        -- poster_
+        left join v_user p on t${table_id}.poster_   = p.id
+        -- creater_
+        left join v_user c on t${table_id}.create_user_  = c.id
+        -- updater
+        left join v_user u on t${table_id}.update_user_  = u.id
+
+        where id_ = ${log_id} and  t${table_id}.action_type_='complete'
+    </select>
+
+
+    <select id="get_huiqian_log_table_data" resultType="java.util.Map">
+        select t${huiqian_table_id}.id_
+        ,e.label edge_label_  --当前派发动作
+        ,n.label node_label_  --当前状态
+        ,t${huiqian_table_id}.poster_
+        ,t${huiqian_table_id}.receiver_
+        ,t${huiqian_table_id}.update_user_
+        ,t${huiqian_table_id}.posted_time_  --当前状态的派发时间
+        ,t${huiqian_table_id}.node_  --当前状态的派发时间
+        ,t${huiqian_table_id}.edge_  --当前状态的派发时间
+        ,p.staff_nm poster_staff_nm --当前状态的派发人
+        ,p.phone    poster_phone    --当前状态的派发人电话
+        ,r.staff_nm receiver_staff_nm  --当前状态的接收人
+        ,r.phone    receiver_phone     --当前状态的接收人电话
+        ,c.staff_nm create_user_staff_nm   --创建人
+        ,c.phone    create_user_phone      --创建人电话
+        ,t${huiqian_table_id}.create_time_     --创建时间
+        ,u.staff_nm update_user_staff_nm   --更新人
+        ,u.phone    update_user_phone      --更新人电话
+        ,t${huiqian_table_id}.update_time_     --更新时间
+
+        --数据表字段
+        <foreach collection="dataTableCols" item="item" open="" close="" separator="">
+            ,t${item.table_id}.${item.field}
+        </foreach>
+
+        from z_${huiqian_table_id} t${huiqian_table_id}
+
+        left join z_${table_id} t${table_id} on t${table_id}.id_ = t${huiqian_table_id}.z_${table_id}_id
+        --左连接当前node、edge表
+        left join v_flow_node n on t${huiqian_table_id}.node_ = n.id
+        left join v_flow_edge e on t${huiqian_table_id}.edge_ = e.id
+        -- receiver_
+        left join v_user r on t${huiqian_table_id}.receiver_ = r.id
+        -- poster_
+        left join v_user p on t${huiqian_table_id}.poster_   = p.id
+        -- creater_
+        left join v_user c on t${huiqian_table_id}.create_user_  = c.id
+        -- updater
+        left join v_user u on t${huiqian_table_id}.update_user_  = u.id
+
+        where z_${table_id}_id = ${id_}
+    </select>
+
+<!--    get_comp_log_data_detail_by_log_id-->
+    <select id="get_log_view_id_by_action_id" resultType="java.util.Map">
+            select c.obj_id as view_id from z_${table_id}_log a
+            left join v_user_action b on a.action_id_ = b.id
+            left join v_exec_obj c on b.exec_id = c.id
+            where a.id_=${log_id} and c.obj_type in ('view_btn','view_title_btn')
+    </select>
+
+    <select id="selectViewTreeList" resultType="java.util.Map">
+        WITH RECURSIVE CategoryCTE AS (
+            SELECT id,parent_id,name,comp_name -- 假设你的表中有名为name的列表示类别名称
+            FROM v_view  -- 假设你的表名为categories
+            WHERE id=#{view_id}  -- 起始条件，从顶级父节点开始
+            UNION ALL
+            SELECT c.id,c.parent_id,c.name,c.comp_name
+            FROM v_view c
+                     INNER JOIN CategoryCTE ON c.parent_id = CategoryCTE.id
+        )
+        SELECT * FROM CategoryCTE where comp_name in ('CompValueEditor','CompValueRender');
+    </select>
+
+    <select id="get_col_fieds_by_editor_obj_ids" resultType="java.util.Map">
+
+        WITH RECURSIVE CategoryCTE AS (
+            select id,obj_id,obj_type,editor_type as type,ds_id,ds_field_id,datetime_fmt from v_comp_value_editor where ds_field_id is not null
+            and obj_id in
+            <foreach collection="obj_ids" item="val" open="(" close=")" separator=",">
+                #{val}
+            </foreach>
+            union all
+            select id,obj_id,obj_type,render_type as type,ds_id,ds_field_id,datetime_fmt from v_comp_value_render where ds_field_id is not null
+            and obj_id in
+            <foreach collection="obj_ids" item="val" open="(" close=")" separator=",">
+                #{val}
+            </foreach>
+        )
+
+        select c.name,c.field,a.type,a.datetime_fmt,c.table_id
+        from CategoryCTE a
+        left join v_datasource_field b on a.ds_field_id = b.id
+        left join v_table_col c on b.table_col_id = c.id
+        where a.ds_field_id is not null and c.name is not null and c.field is not null
+    </select>
+
+
+    <select id="getRelatedUsers" resultType="java.lang.Integer">
+        WITH RECURSIVE group_hierarchy AS (
+        SELECT g.id
+        FROM v_group g
+        JOIN v_user u ON g.id = u.belong_group_id
+        WHERE u.id = #{receiver}
+
+        UNION ALL
+
+        SELECT g2.id
+        FROM v_group g2
+        JOIN group_hierarchy gh ON g2.id = (
+        SELECT parent_id FROM v_group WHERE id = gh.id
+        )
+        WHERE g2.id IS NOT NULL
+        )
+        SELECT u.id
+        FROM v_user u
+        WHERE u.id IN
+        <foreach collection="scoped_user_ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        AND u.belong_group_id IN (
+        SELECT id FROM group_hierarchy
+        )
+    </select>
+
+    <select id="getLogTableInitData" resultType="java.util.Map">
+        select
+        e.label edge_label_  --当前派发动作
+        ,n.label node_label_  --当前状态
+        ,p.staff_nm poster_staff_nm --当前状态的派发人
+        ,p.phone    poster_phone    --当前状态的派发人电话
+        ,r.staff_nm receiver_staff_nm  --当前状态的接收人
+        ,r.phone    receiver_phone     --当前状态的接收人电话
+        ,c.staff_nm create_user_staff_nm   --创建人
+        ,c.phone    create_user_phone      --创建人电话
+        ,u.staff_nm update_user_staff_nm   --更新人
+        ,u.phone    update_user_phone      --更新人电话
+        ,${table_id}.*
+
+        from z_${table_id}_log ${table_id}
+
+        --左连接当前node、edge表
+        left join v_flow_node n on ${table_id}.node_ = n.id
+        left join v_flow_edge e on ${table_id}.edge_ = e.id
+        left join v_user r on ${table_id}.receiver_ = r.id
+        left join v_user p on ${table_id}.poster_   = p.id
+        left join v_user c on ${table_id}.create_user_  = c.id
+        left join v_user u on ${table_id}.update_user_  = u.id
+        where
+            ${table_id}.row_id_ = ${id_}
+    </select>
+</mapper>

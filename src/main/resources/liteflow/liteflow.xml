@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flow>
+    <chain name="chain1">
+        cmpData = '{"name":"jack","age":27,"birth":"1995-10-01"}';
+
+        THEN(js1,
+            IF( FieldNotEmpty.tag("view123_form_rows"),
+                RowsInsert.data(cmpData),
+                FlowComplete)
+        );
+    </chain>
+
+    <nodes>
+        <node id="js1" name="普通脚本1" type="script" language="js">
+            <![CDATA[
+            var a=3;
+            var b=2;
+            var c=1;
+            var d=5;
+
+            function addByArray(values) {
+                var sum = 0;
+                for (var i = 0; i < values.length; i++) {
+                    sum += values[i];
+                }
+                return sum;
+            }
+            var result = addByArray([a,b,c,d]);
+            execContext.addExecOpRecord("op999", "js_update", "table1111", "after",111, "node1", "edge1", "node2");
+        ]]>
+        </node>
+    </nodes>
+</flow>

@@ -1,0 +1,1029 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="tcdx.uap.mapper.CommonDBMapper">
+
+    <select id="selectById" resultType="java.util.Map">
+        select * from ${tableName} where id=#{id}
+    </select>
+
+    <select id="selectIn" resultType="java.util.Map">
+        select * from ${tableName} where ${columnName} in
+        <foreach collection="valueList" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </select>
+
+    <select id="selectEq" resultType="java.util.Map">
+        select
+        <if test="selectedColumns!=null and selectedColumns.size>0 ">
+            <foreach collection="selectedColumns" item="value" open="" close="" separator=",">
+                ${value}
+            </foreach>
+        </if>
+        <if test="selectedColumns==null or selectedColumns.size==0">
+            *
+        </if>
+        from ${tableName} where
+        <foreach collection="equalMap" index="key" item="val" open="(" close=")" separator="and">
+                ${key}=#{val}
+        </foreach>
+    </select>
+
+    <select id="selectDistinctEq" resultType="java.util.Map">
+        select distinct
+        <if test="selectedColumns!=null and selectedColumns.size>0 ">
+            <foreach collection="selectedColumns" item="value" open="" close="" separator=",">
+                ${value}
+            </foreach>
+        </if>
+        <if test="selectedColumns==null or selectedColumns.size==0">
+            *
+        </if>
+        from ${tableName} where
+        <foreach collection="equalMap" index="key" item="val" open="(" close=")" separator="and">
+            ${key}=#{val}
+        </foreach>
+    </select>
+
+    <select id="selectDistinctAndCauses" parameterType="java.util.Map" resultType="java.util.Map">
+        select distinct
+        <if test="selectedColumns!=null and selectedColumns.size>0 ">
+            <foreach collection="selectedColumns" item="value" open="" close="" separator=",">
+                ${value}
+            </foreach>
+        </if>
+        <if test="selectedColumns==null or selectedColumns.size==0">
+            *
+        </if>
+        from ${tableName}
+        <where>
+            <include refid="tcdx.uap.mapper.CommonDBMapper.andCauses" />
+        </where>
+        <if test='sortMap!=null and sortMap.size>0'>
+            order by
+            <foreach collection="sortMap" index="sortColumn" item="ascending" open="" close="" separator=",">
+                ${sortColumn} ${ascending}
+            </foreach>
+        </if>
+        <if test='offset!=null and limit!=""'>
+            limit ${limit} offset ${offset};
+        </if>
+    </select>
+
+    <select id="selectColsAndCauses" parameterType="java.util.Map" resultType="java.util.Map">
+        select distinct
+        <if test="selectedColumns!=null and selectedColumns.size>0 ">
+            <foreach collection="selectedColumns" item="value" open="" close="" separator=",">
+                ${value}
+            </foreach>
+        </if>
+        <if test="selectedColumns==null or selectedColumns.size==0">
+            *
+        </if>
+        from ${tableName}
+        <where>
+            <include refid="tcdx.uap.mapper.CommonDBMapper.andCauses" />
+        </where>
+        <if test='sortMap!=null and sortMap.size>0'>
+            order by
+            <foreach collection="sortMap" index="sortColumn" item="ascending" open="" close="" separator=",">
+                ${sortColumn} ${ascending}
+            </foreach>
+        </if>
+        <if test='offset!=null and limit!=""'>
+            limit ${limit} offset ${offset};
+        </if>
+    </select>
+
+    <select id="selectEqSortLimit" resultType="java.util.Map">
+        select
+        <if test="selectedColumns!=null and selectedColumns.size>0 ">
+            <foreach collection="selectedColumns" item="value" open="" close="" separator=",">
+                ${value}
+            </foreach>
+        </if>
+        <if test="selectedColumns==null or selectedColumns.size==0">
+            *
+        </if>
+        from ${tableName} where
+        <foreach collection="equalMap" index="key" item="val" open="" close="" separator="and">
+            ${key}=#{val}
+        </foreach>
+        <if test='sortMap!=null'>
+            order by
+            <foreach collection="sortMap" index="sortColumn" item="direct" open="" close="" separator=",">
+                ${sortColumn} ${direct}
+            </foreach>
+        </if>
+        <if test='offset!=null and limit!=null'>
+            limit ${limit} offset ${offset};
+        </if>
+    </select>
+
+    <sql id="andCauses">
+        <foreach collection="andCauses" item="andCause" open="" close="" separator="and">
+            <if test='andCause.tp=="lk"'>
+                lower(${andCause.cn}) like '%'||lower(#{andCause.val})||'%'
+            </if>
+            <if test='andCause.tp=="nlk"'>
+                lower(${andCause.cn}) not like '%'||lower(#{andCause.val})||'%'
+            </if>
+            <if test='andCause.tp=="eq"'>
+                ${andCause.cn}=#{andCause.val}
+            </if>
+            <if test='andCause.tp=="neq"'>
+                ${andCause.cn}!=#{andCause.val}
+            </if>
+            <if test='andCause.tp=="in"'>
+                ${andCause.cn} in
+                <foreach collection="andCause.vals" item="value" open="(" close=")" separator=",">
+                    #{value}
+                </foreach>
+            </if>
+            <if test='andCause.tp=="nin" and andCause.vals.size>0'>
+                ${andCause.cn} not in
+                <foreach collection="andCause.vals" item="value" open="(" close=")" separator=",">
+                    #{value}
+                </foreach>
+            </if>
+            <if test='andCause.tp=="uept"'>
+                ${andCause.cn} is not null
+            </if>
+            <if test='andCause.tp=="ept"'>
+                ${andCause.cn} is null
+            </if>
+            <if test='andCause.tp=="or" and andCause.cas.size>0'>
+                <foreach collection="andCause.cas" item="orCauseList" open="(" close=")" separator="or">
+                    <foreach collection="orCauseList" item="cause1" open="(" close=")" separator="and">
+                        /*比较类型：${cause1.tp}，列名：${cause1.cn}*/
+                        <if test='cause1.tp=="lk"'>
+                            lower(${cause1.cn}) like '%'||lower(#{cause1.val})||'%'
+                        </if>
+                        <if test='cause1.tp=="nlk"'>
+                            lower(${cause1.cn}) not like '%'||lower(#{cause1.val})||'%'
+                        </if>
+                        <if test='cause1.tp=="eq"'>
+                            ${cause1.cn}=#{cause1.val}
+                        </if>
+                        <if test='cause1.tp=="neq"'>
+                            ${cause1.cn}!=#{cause1.val}
+                        </if>
+                        <if test='cause1.tp=="in"'>
+                            ${cause1.cn} in
+                            <foreach collection="cause1.vals" item="value" open="(" close=")" separator=",">
+                                #{value}
+                            </foreach>
+                        </if>
+                        <if test='cause1.tp=="nin" and cause1.vals.size>0'>
+                            ${cause1.cn} not in
+                            <foreach collection="cause1.vals" item="value" open="(" close=")" separator=",">
+                                #{value}
+                            </foreach>
+                        </if>
+                        <if test='cause1.tp=="uept"'>
+                            ${cause1.cn} is not null
+                        </if>
+                        <if test='cause1.tp=="ept"'>
+                            ${cause1.cn} is null
+                        </if>
+                    </foreach>
+                </foreach>
+            </if>
+        </foreach>
+    </sql>
+
+    <select id="selectAndCauses" parameterType="java.util.Map" resultType="java.util.Map">
+        select * from ${tableName}
+        <where>
+        <include refid="tcdx.uap.mapper.CommonDBMapper.andCauses" />
+        </where>
+        <if test='sortMap!=null and sortMap.size>0'>
+            order by
+            <foreach collection="sortMap" index="sortColumn" item="ascending" open="" close="" separator=",">
+                ${sortColumn} ${ascending}
+            </foreach>
+        </if>
+        <if test='offset!=null and limit!=""'>
+            limit ${limit} offset ${offset};
+        </if>
+    </select>
+
+
+    <select id="selectAndCausesCount" parameterType="java.util.Map" resultType="java.util.Map">
+        select count(*) c from ${tableName}
+        <where>
+            <include refid="tcdx.uap.mapper.CommonDBMapper.andCauses" />
+        </where>
+    </select>
+
+    <select id="selectAndCausesCountGroupBy" parameterType="java.util.Map" resultType="java.util.Map">
+        select count(*) c,
+        <foreach collection="groupByColumnLists" item="value" open="" close="" separator=",">
+            ${value}
+        </foreach>
+        from ${tableName}
+        <where>
+            <include refid="tcdx.uap.mapper.CommonDBMapper.andCauses" />
+        </where>
+        group by
+        <foreach collection="groupByColumnLists" item="value" open="" close="" separator=",">
+            ${value}
+        </foreach>
+    </select>
+
+
+    <update id="updateById" parameterType="java.util.Map" >
+        update ${tableName} set
+        <foreach collection="updateData" index="key" item="val" open="" close="" separator=",">
+            ${key} = #{val}
+        </foreach>
+        where id=#{id}
+    </update>
+
+    <update id="updateIn" parameterType="java.util.Map" >
+        update ${tableName} set
+        <foreach collection="updateData" index="key" item="val" open="" close="" separator=",">
+            ${key} = #{val}
+        </foreach>
+        where ${columnName} in
+        <foreach collection="valueList" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </update>
+
+    <update id="updateEq" parameterType="java.util.Map" >
+        update ${tableName} set
+        <foreach collection="updateData" index="key" item="val" open="" close="" separator=",">
+            ${key} = #{val}
+        </foreach>
+        where
+        <foreach collection="equalMap" index="key" item="val" open="" close="" separator="and">
+                ${key}=#{val}
+        </foreach>
+    </update>
+
+    <delete id="deleteById" parameterType="java.util.Map">
+        delete from ${tableName} where id = #{id}
+    </delete>
+
+    <delete id="deleteEq" parameterType="java.util.Map">
+        delete from ${tableName} where
+        <foreach collection="equalMap" index="key" item="val" open="" close="" separator="and">
+            ${key}=#{val}
+        </foreach>
+    </delete>
+
+
+    <delete id="deleteIn" parameterType="java.util.Map" >
+        delete ${tn}
+        where ${col} in
+        <foreach collection="ids" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </delete>
+
+    <!-- 1.1 插入一条数据 -->
+    <insert id="insertMap" parameterType="java.util.Map">
+        insert into ${tableName}
+        <foreach collection="insertMap.keys" item="key" open="(" close=")" separator=",">
+            ${key}
+        </foreach>
+        values
+        <foreach collection="insertMap.values" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </insert>
+
+
+    <update id="createTable" parameterType="java.util.Map">
+        create table ${tableName} (
+        <foreach collection="createMap" index="key1" item="value1" open="" close="" separator=",">
+            <if test='value1!=null and value1!=""'>
+                ${key1} ${value1}
+            </if>
+        </foreach>
+        )
+    </update>
+
+    <update id="createIdSequence">
+        DROP SEQUENCE IF EXISTS ${tableName}_id_seq;
+
+        CREATE SEQUENCE ${tableName}_id_seq
+        START WITH 1
+        INCREMENT BY 1
+        NO MINVALUE
+        NO MAXVALUE
+        CACHE 1;
+
+        alter table ${tableName} alter column id set default nextval('${tableName}_id_seq');
+    </update>
+
+    <update id="createLogIdSequence">
+        DROP SEQUENCE IF EXISTS ${tableName}_log_id_seq;
+
+        CREATE SEQUENCE ${tableName}_log_id_seq
+        START WITH 1
+        INCREMENT BY 1
+        NO MINVALUE
+        NO MAXVALUE
+        CACHE 1;
+
+        alter table ${tableName} alter column log_id set default nextval('${tableName}_log_id_seq');
+    </update>
+
+    <update id="copyTableIn">
+        insert into ${toTableName}
+        <foreach collection="copyColumnNameList" item="value" open="(" close=")" separator=",">
+            ${value}
+        </foreach>
+        select
+        <foreach collection="copyColumnNameList" item="value" open="" close="" separator=",">
+            ${value}
+        </foreach> from ${fromTableName} t where t.${inColumnName} in
+        <foreach collection="inValueList" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </update>
+
+    <update id="addTableColumns">
+        alter table ${tableName}
+        <foreach collection="columnMap" index="columnName" item="type" open="" close="" separator=",">
+            add column ${columnName} ${type}
+        </foreach>
+    </update>
+
+    <select id="selectMax" resultType="java.util.Map">
+        select max(${increasedColumn}) ${increasedColumn} from ${tableName}
+    </select>
+
+    <update id="delTableColumns">
+        alter table ${tableName}
+        <foreach collection="columnNameList" item="columnName"  open="" close="" separator=",">
+            drop column ${columnName}
+        </foreach>
+    </update>
+
+    <select id="selectInboxList" parameterType="java.util.Map" resultType="java.util.Map">
+        select a.*,b.rec_staff_no,b.rec_staff_nm,b.if_top,b.if_read
+        from personal_affairs a
+        join rec_email b on b.eid= a.id
+        where b.rec_staff_no = #{staff_id} and b.time_if_delete is null
+        <if test='eid!=null'>
+            and b.eid = #{eid}
+        </if>
+        order by if_top desc,send_time desc
+        <if test='offset!=null and limit!=null'>
+            limit ${limit} offset ${offset};
+        </if>
+    </select>
+
+    <select id="selectInboxList2" parameterType="java.util.Map" resultType="java.util.Map">
+        select a.*,b.rec_staff_no,b.rec_staff_nm,b.if_top,b.if_read
+        from personal_affairs a
+        join rec_email b on b.eid= a.id
+        where b.rec_staff_no = #{staff_id} and b.time_if_delete is null
+        <if test='field!=null'>
+            and
+            (a.title like '%'||lower(#{field})||'%'
+            or a.info like '%'||lower(#{field})||'%'
+            or a.staff_name like '%'||lower(#{field})||'%')
+        </if>
+        <if test='haveread=="已读"'>
+            and
+            b.if_read = 'Y'
+        </if>
+        <if test='haveread=="未读"'>
+            and
+            b.if_read = 'N'
+        </if>
+        <if test='haveread=="无"'>
+
+        </if>
+        order by if_top desc,send_time desc,b.id
+        <if test='offset!=null and limit!=null'>
+            limit ${limit} offset ${offset};
+        </if>
+    </select>
+
+    <select id="selectOutboxList" resultType="java.util.Map">
+        select a.id, staff_id, staff_name, fileinfo, title, info, send_time, rid
+        ,string_agg(b.rec_staff_nm, ';') name_list
+        ,count(distinct case when b.if_read = 'Y' then b.id end) read_cnt
+        ,count(distinct b.id ) total_cnt
+        from personal_affairs a
+        join rec_email b on b.eid= a.id
+        where a.staff_id = #{staffId} and b.time_if_delete is null
+        <if test='eid!=null'>
+            and b.eid = #{eid}
+        </if>
+        group by a.id, staff_id, staff_name, fileinfo, title, info, send_time, rid
+        order by send_time desc
+        <if test='offset!=null and limit!=null'>
+            limit ${limit} offset ${offset};
+        </if>
+    </select>
+
+    <select id="selectOutboxList2" resultType="java.util.Map">
+        select a.id, staff_id, staff_name, fileinfo, title, info, send_time, rid
+        ,string_agg(b.rec_staff_nm, ';') name_list
+        ,count(distinct case when b.if_read = 'Y' then b.id end) read_cnt
+        ,count(distinct b.id ) total_cnt
+        from personal_affairs a
+        join rec_email b on b.eid= a.id
+        where a.staff_id = #{staff_id} and b.time_if_delete is null
+        <if test='field!=null'>
+            and
+            (a.title like '%'||lower(#{field})||'%'
+            or a.info like '%'||lower(#{field})||'%'
+            or b.rec_staff_nm like '%'||lower(#{field})||'%')
+        </if>
+        group by a.id, staff_id, staff_name, fileinfo, title, info, send_time, rid
+        order by send_time desc
+        <if test='offset!=null and limit!=null'>
+            limit ${limit} offset ${offset};
+        </if>
+    </select>
+
+    <select id="selectCountInboxList" parameterType="java.util.Map" resultType="java.lang.Integer">
+        select count(*)
+        from personal_affairs a
+        join rec_email b on b.eid= a.id
+        <where>
+            <include refid="tcdx.uap.mapper.CommonDBMapper.andCauses" />
+        </where>
+        and b.time_if_delete is null
+    </select>
+
+    <select id="selectCountInboxList2" parameterType="java.util.Map" resultType="java.lang.Integer">
+        select count(*)
+        from personal_affairs a
+        join rec_email b on b.eid= a.id
+        where b.rec_staff_no = #{staff_id} and b.time_if_delete is null
+        <if test='field!=null'>
+            and
+            (a.title like '%'||lower(#{field})||'%'
+            or a.info like '%'||lower(#{field})||'%'
+            or a.staff_name like '%'||lower(#{field})||'%')
+        </if>
+        <if test='haveread=="已读"'>
+            and
+            b.if_read = 'Y'
+        </if>
+        <if test='haveread=="未读"'>
+            and
+            b.if_read = 'N'
+        </if>
+        <if test='haveread=="无"'>
+
+        </if>
+    </select>
+
+    <select id="selectCountOutboxList" resultType="java.lang.Integer">
+        select count(distinct a.id)
+        from personal_affairs a
+        join rec_email b on b.eid= a.id
+        where a.staff_id = #{staffId}  and b.time_if_delete is null
+    </select>
+
+    <select id="selectCountOutboxList2" resultType="java.lang.Integer">
+        select count(distinct a.id)
+        from personal_affairs a
+        join rec_email b on b.eid= a.id
+        where a.staff_id = #{staff_id} and b.time_if_delete is null
+        <if test='field!=null'>
+            and
+            (a.title like '%'||lower(#{field})||'%'
+            or a.info like '%'||lower(#{field})||'%'
+            or b.rec_staff_nm like '%'||lower(#{field})||'%')
+        </if>
+    </select>
+
+    <select id="mohuSearch" resultType="java.util.Map">
+        ${sql}
+            limit 20
+    </select>
+
+    <select id="sqlSearch" resultType="java.util.Map">
+        ${sql}
+    </select>
+
+    <update id="updateDupName" parameterType="java.util.Map" >
+        update tc_staff_tab b set name =b.name||'('||b.staff_no||')'
+        from (select m.name,m.pare_org_id,count(*) cnt from tc_staff_tab m
+                group by m.name,m.pare_org_id
+                having count(*)>1) a
+        where a.name = b.name and a.pare_org_id = b.pare_org_id
+    </update>
+
+    <select id="selectZhijuZoufang" resultType="java.lang.Integer">
+        select count(*)
+        from qwq_zoufang_log
+        where to_date(link_time,'yyyy/MM/dd') between to_date('${beginDate}','yyyy/MM/dd') and to_date('${endDate}','yyyy/MM/dd') and
+         ${columnName} in
+        <foreach collection="valueList" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </select>
+
+    <select id="selectStaffZoufang" resultType="java.lang.Integer">
+        select count(*)
+        from qwq_zoufang_log
+        where to_date(link_time,'yyyy/MM/dd') between to_date('${beginDate}','yyyy/MM/dd') and to_date('${endDate}','yyyy/MM/dd') and
+        <foreach collection="equalMap" index="key" item="val" open="(" close=")" separator="and">
+            ${key}=#{val}
+        </foreach>
+    </select>
+
+    <select id="selectZhijuZoufangList" resultType="java.util.Map">
+        select *
+        from qwq_zoufang
+        where to_date(link_time,'yyyy/MM/dd') between to_date('${beginDate}','yyyy/MM/dd') and to_date('${endDate}','yyyy/MM/dd') and
+        ${columnName} in
+        <foreach collection="valueList" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+        order by link_time desc
+        <if test='offset!=null and limit!=""'>
+            limit ${limit} offset ${offset};
+        </if>
+
+    </select>
+
+    <select id="selectStaffZoufangList" resultType="java.util.Map">
+        select *
+        from qwq_zoufang_log
+            <where>
+                to_date(link_time,'yyyy/MM/dd') between to_date('${beginDate}','yyyy/MM/dd') and to_date('${endDate}','yyyy/MM/dd') and
+                <include refid="tcdx.uap.mapper.CommonDBMapper.andCauses" />
+            </where>
+        order by link_time desc
+        <if test='offset!=null and limit!=""'>
+            limit ${limit} offset ${offset};
+        </if>
+    </select>
+
+    <select id="selectLinkTimeAndCauseList" resultType="java.util.Map">
+        select *
+        from ${tableName}
+        <where>
+            to_date(${timeCol},'yyyy/MM/dd') between to_date('${beginDate}','yyyy/MM/dd')
+            and to_date('${endDate}','yyyy/MM/dd') and
+            <include refid="tcdx.uap.mapper.CommonDBMapper.andCauses" />
+        </where>
+        <if test='sortMap!=null and sortMap.size>0'>
+            order by
+            <foreach collection="sortMap" index="sortColumn" item="ascending" open="" close="" separator=",">
+                ${sortColumn} ${ascending}
+            </foreach>
+        </if>
+        <if test='offset!=null and limit!=""'>
+            limit ${limit} offset ${offset};
+        </if>
+    </select>
+
+    <select id="selectNotLinkTimeAndCauseList" resultType="java.util.Map">
+        select *
+        from ${tableName}
+        <where>
+            to_date(${timeCol},'yyyy/MM/dd') not between to_date('${beginDate}','yyyy/MM/dd')
+            and to_date('${endDate}','yyyy/MM/dd') and
+            <include refid="tcdx.uap.mapper.CommonDBMapper.andCauses" />
+        </where>
+        <if test='sortMap!=null and sortMap.size>0'>
+            order by
+            <foreach collection="sortMap" index="sortColumn" item="ascending" open="" close="" separator=",">
+                ${sortColumn} ${ascending}
+            </foreach>
+        </if>
+        <if test='offset!=null and limit!=""'>
+            limit ${limit} offset ${offset};
+        </if>
+    </select>
+
+    <select id="selectCountLinkTimeAndCauseList" resultType="java.lang.Integer">
+        select count(*)
+        from ${tableName}
+        <where>
+            to_date(${timeCol},'yyyy/MM/dd') between to_date('${beginDate}','yyyy/MM/dd')
+            and to_date('${endDate}','yyyy/MM/dd') and
+            <include refid="tcdx.uap.mapper.CommonDBMapper.andCauses" />
+        </where>
+    </select>
+
+    <select id="selectNotCountLinkTimeAndCauseList" resultType="java.lang.Integer">
+        select count(*)
+        from ${tableName}
+        <where>
+            to_date(${timeCol},'yyyy/MM/dd') not between to_date('${beginDate}','yyyy/MM/dd')
+            and to_date('${endDate}','yyyy/MM/dd') and
+            <include refid="tcdx.uap.mapper.CommonDBMapper.andCauses" />
+        </where>
+    </select>
+
+    <select id="selectCountZhijuZoufangList" resultType="java.lang.Integer">
+        select count(*)
+        from qwq_zoufang
+        where to_date(link_time,'yyyy/MM/dd') between to_date('${beginDate}','yyyy/MM/dd') and to_date('${endDate}','yyyy/MM/dd') and
+        ${columnName} in
+        <foreach collection="valueList" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+    </select>
+
+    <select id="selectCountStaffZoufangList" resultType="java.lang.Integer">
+        select count(*)
+        from qwq_zoufang_log
+        <where>
+            to_date(link_time,'yyyy/MM/dd') between to_date('${beginDate}','yyyy/MM/dd') and to_date('${endDate}','yyyy/MM/dd') and
+            <include refid="tcdx.uap.mapper.CommonDBMapper.andCauses" />
+        </where>
+    </select>
+
+
+    <select id="selectZhijuShangji" resultType="java.lang.Integer">
+        select count(*)
+        from qwq_jsmind_sj
+        where to_date(link_time,'yyyy/MM/dd') not between to_date('${beginDate}','yyyy/MM/dd') and to_date('${endDate}','yyyy/MM/dd') and
+        ${columnName} in
+        <foreach collection="valueList" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+        <if test='offset!=null and limit!=""'>
+            limit ${limit} offset ${offset};
+        </if>
+    </select>
+
+    <select id="selectStaffShangji" resultType="java.lang.Integer">
+        select count(*)
+        from qwq_jsmind_sj
+        where to_date(link_time,'yyyy/MM/dd') not between to_date('${beginDate}','yyyy/MM/dd') and to_date('${endDate}','yyyy/MM/dd')
+          and time_if_delete is null and
+        <foreach collection="equalMap" index="key" item="val" open="(" close=")" separator="and">
+            ${key}=#{val}
+        </foreach>
+    </select>
+
+    <select id="selectStaffShangjiWeekMonth" resultType="java.lang.Integer">
+        select count(*)
+        from qwq_jsmind_sj
+        where to_date(link_time,'yyyy/MM/dd') between to_date('${beginDate}','yyyy/MM/dd') and to_date('${endDate}','yyyy/MM/dd')
+        and time_if_delete is null and
+        <foreach collection="equalMap" index="key" item="val" open="(" close=")" separator="and">
+            ${key}=#{val}
+        </foreach>
+    </select>
+
+    <select id="selectStaffShangjiWeekMonth2" resultType="java.lang.Integer">
+        select count(*)
+        from qwq_jsmind_sj
+        where to_date(link_time,'yyyy/MM/dd') between to_date('${beginDate}','yyyy/MM/dd') and to_date('${endDate}','yyyy/MM/dd')
+        and time_if_delete is null and
+        <where>
+            to_date(link_time,'yyyy/MM/dd') between to_date('${beginDate}','yyyy/MM/dd') and to_date('${endDate}','yyyy/MM/dd') and
+              time_if_delete is null and
+            <include refid="tcdx.uap.mapper.CommonDBMapper.andCauses" />
+        </where>
+    </select>
+
+    <select id="selectZhijuShangjiList" resultType="java.util.Map">
+        select *
+        from qwq_jsmind_sj
+        where to_date(link_time,'yyyy/MM/dd') not between to_date('${beginDate}','yyyy/MM/dd') and to_date('${endDate}','yyyy/MM/dd')
+          and time_if_delete is null and
+        ${columnName} in
+        <foreach collection="valueList" item="value" open="(" close=")" separator=",">
+            #{value}
+        </foreach>
+        order by link_time desc
+    </select>
+
+    <select id="selectStaffShangjiList" resultType="java.util.Map">
+        select *
+        from qwq_jsmind_sj
+        where to_date(link_time,'yyyy/MM/dd') not between to_date('${beginDate}','yyyy/MM/dd') and to_date('${endDate}','yyyy/MM/dd')
+          and time_if_delete is null and
+        <foreach collection="equalMap" index="key" item="val" open="(" close=")" separator="and">
+            ${key}=#{val}
+        </foreach>
+        order by link_time desc
+        <if test='offset!=null and limit!=""'>
+            limit ${limit} offset ${offset};
+        </if>
+    </select>
+
+    <select id="selectStaffShangjiList2" resultType="java.util.Map">
+        select *
+        from qwq_jsmind_sj
+        where to_date(link_time,'yyyy/MM/dd') between to_date('${beginDate}','yyyy/MM/dd') and to_date('${endDate}','yyyy/MM/dd')
+        and time_if_delete is null and
+        <foreach collection="equalMap" index="key" item="val" open="(" close=")" separator="and">
+            ${key}=#{val}
+        </foreach>
+        order by link_time desc
+        <if test='offset!=null and limit!=""'>
+            limit ${limit} offset ${offset};
+        </if>
+    </select>
+
+    <select id="selectCountStaffShangjiList" resultType="java.lang.Integer">
+        select count(*)
+        from qwq_jsmind_sj
+        where to_date(link_time,'yyyy/MM/dd') not between to_date('${beginDate}','yyyy/MM/dd') and to_date('${endDate}','yyyy/MM/dd')
+          and time_if_delete is null and
+        <foreach collection="equalMap" index="key" item="val" open="(" close=")" separator="and">
+            ${key}=#{val}
+        </foreach>
+    </select>
+    <select id="selectCountStaffShangjiList2" resultType="java.lang.Integer">
+        select count(*)
+        from qwq_jsmind_sj
+        where to_date(link_time,'yyyy/MM/dd') between to_date('${beginDate}','yyyy/MM/dd') and to_date('${endDate}','yyyy/MM/dd')
+        and time_if_delete is null and
+        <foreach collection="equalMap" index="key" item="val" open="(" close=")" separator="and">
+            ${key}=#{val}
+        </foreach>
+    </select>
+
+
+    <select id="getManagerTubiaoInfo" resultType="java.util.Map">
+        select
+            sum(coalesce(Cast(a.col16 as numeric),0))  zsr1,
+            sum(coalesce(Cast(a.col17 as numeric),0))  zsr2,
+            sum(coalesce(Cast(a.col18 as numeric),0))  zsr3,
+            sum(coalesce(Cast(a.col19 as numeric),0))  zsr4,
+            sum(coalesce(Cast(a.col20 as numeric),0))  zsr5,
+            sum(coalesce(Cast(a.col21 as numeric),0))  zsr6,
+            sum(coalesce(Cast(a.col22 as numeric),0))  zsr7,
+            sum(coalesce(Cast(a.col23 as numeric),0))  zsr8,
+            sum(coalesce(Cast(a.col24 as numeric),0))  zsr9,
+            sum(coalesce(Cast(a.col25 as numeric),0))  zsr10,
+            sum(coalesce(Cast(a.col26 as numeric),0))  zsr11,
+            sum(coalesce(Cast(a.col27 as numeric),0))  zsr12,
+
+            sum(coalesce(Cast(a.col16 as numeric),0))/sum(coalesce(Cast(b.col4 as numeric),0))  zsrwc1,
+            sum(coalesce(Cast(a.col17 as numeric),0))/sum(coalesce(Cast(b.col4 as numeric),0))  zsrwc2,
+            sum(coalesce(Cast(a.col18 as numeric),0))/sum(coalesce(Cast(b.col4 as numeric),0))  zsrwc3,
+            sum(coalesce(Cast(a.col19 as numeric),0))/sum(coalesce(Cast(b.col4 as numeric),0))  zsrwc4,
+            sum(coalesce(Cast(a.col20 as numeric),0))/sum(coalesce(Cast(b.col4 as numeric),0))  zsrwc5,
+            sum(coalesce(Cast(a.col21 as numeric),0))/sum(coalesce(Cast(b.col4 as numeric),0))  zsrwc6,
+            sum(coalesce(Cast(a.col22 as numeric),0))/sum(coalesce(Cast(b.col4 as numeric),0))  zsrwc7,
+            sum(coalesce(Cast(a.col23 as numeric),0))/sum(coalesce(Cast(b.col4 as numeric),0))  zsrwc8,
+            sum(coalesce(Cast(a.col24 as numeric),0))/sum(coalesce(Cast(b.col4 as numeric),0))  zsrwc9,
+            sum(coalesce(Cast(a.col25 as numeric),0))/sum(coalesce(Cast(b.col4 as numeric),0))  zsrwc10,
+            sum(coalesce(Cast(a.col26 as numeric),0))/sum(coalesce(Cast(b.col4 as numeric),0))  zsrwc11,
+            sum(coalesce(Cast(a.col27 as numeric),0))/sum(coalesce(Cast(b.col4 as numeric),0))  zsrwc12,
+
+            sum(coalesce(Cast(a.col16 as numeric),0))/sum(coalesce(Cast(a.col4 as numeric),0))  zsrtb1,
+            sum(coalesce(Cast(a.col17 as numeric),0))/sum(coalesce(Cast(a.col5 as numeric),0))  zsrtb2,
+            sum(coalesce(Cast(a.col18 as numeric),0))/sum(coalesce(Cast(a.col6 as numeric),0))  zsrtb3,
+            sum(coalesce(Cast(a.col19 as numeric),0))/sum(coalesce(Cast(a.col7 as numeric),0))  zsrtb4,
+            sum(coalesce(Cast(a.col20 as numeric),0))/sum(coalesce(Cast(a.col8 as numeric),0))  zsrtb5,
+            sum(coalesce(Cast(a.col21 as numeric),0))/sum(coalesce(Cast(a.col9 as numeric),0))  zsrtb6,
+            sum(coalesce(Cast(a.col22 as numeric),0))/sum(coalesce(Cast(a.col10 as numeric),0))  zsrtb7,
+            sum(coalesce(Cast(a.col23 as numeric),0))/sum(coalesce(Cast(a.col11 as numeric),0))  zsrtb8,
+            sum(coalesce(Cast(a.col24 as numeric),0))/sum(coalesce(Cast(a.col12 as numeric),0))  zsrtb9,
+            sum(coalesce(Cast(a.col25 as numeric),0))/sum(coalesce(Cast(a.col13 as numeric),0))  zsrtb10,
+            sum(coalesce(Cast(a.col26 as numeric),0))/sum(coalesce(Cast(a.col14 as numeric),0))  zsrtb11,
+            sum(coalesce(Cast(a.col27 as numeric),0))/sum(coalesce(Cast(a.col15 as numeric),0))  zsrtb12,
+
+            sum(coalesce(Cast(a.col16 as numeric),0))/sum(coalesce(Cast(a.col15 as numeric),1))  zsrhb1,
+            sum(coalesce(Cast(a.col17 as numeric),0))/sum(coalesce(Cast(a.col16 as numeric),1))  zsrhb2,
+            sum(coalesce(Cast(a.col18 as numeric),0))/sum(coalesce(Cast(a.col17 as numeric),1))  zsrhb3,
+            sum(coalesce(Cast(a.col19 as numeric),0))/sum(coalesce(Cast(a.col18 as numeric),1))  zsrhb4,
+            sum(coalesce(Cast(a.col20 as numeric),0))/sum(coalesce(Cast(a.col19 as numeric),1))  zsrhb5,
+            sum(coalesce(Cast(a.col21 as numeric),0))/sum(coalesce(Cast(a.col20 as numeric),1))  zsrhb6,
+            sum(coalesce(Cast(a.col22 as numeric),0))/sum(coalesce(Cast(a.col21 as numeric),1))  zsrhb7,
+            sum(coalesce(Cast(a.col23 as numeric),0))/sum(coalesce(Cast(a.col22 as numeric),1))  zsrhb8,
+            sum(coalesce(Cast(a.col24 as numeric),0))/sum(coalesce(Cast(a.col23 as numeric),1))  zsrhb9,
+            sum(coalesce(Cast(a.col25 as numeric),0))/sum(coalesce(Cast(a.col24 as numeric),1))  zsrhb10,
+            sum(coalesce(Cast(a.col26 as numeric),0))/sum(coalesce(Cast(a.col25 as numeric),1))  zsrhb11,
+            sum(coalesce(Cast(a.col27 as numeric),0))/sum(coalesce(Cast(a.col26 as numeric),1))  zsrhb12,
+
+            sum(coalesce(Cast(b.col9 as numeric),0))  jc1,
+            sum(coalesce(Cast(b.col10 as numeric),0))  jc2,
+            sum(coalesce(Cast(b.col11 as numeric),0))  jc3,
+            sum(coalesce(Cast(b.col12 as numeric),0))  jc4,
+            sum(coalesce(Cast(b.col13 as numeric),0))  jc5,
+            sum(coalesce(Cast(b.col14 as numeric),0))  jc6,
+            sum(coalesce(Cast(b.col15 as numeric),0))  jc7,
+            sum(coalesce(Cast(b.col16 as numeric),0))  jc8,
+            sum(coalesce(Cast(b.col17 as numeric),0))  jc9,
+            sum(coalesce(Cast(b.col18 as numeric),0))  jc10,
+            sum(coalesce(Cast(b.col19 as numeric),0))  jc11,
+            sum(coalesce(Cast(b.col20 as numeric),0))  jc12,
+
+            sum(coalesce(Cast(b.col9 as numeric),0))/sum(coalesce(Cast(b.col5 as numeric),0))  jcwc1,
+            sum(coalesce(Cast(b.col10 as numeric),0))/sum(coalesce(Cast(b.col5 as numeric),0))  jcwc2,
+            sum(coalesce(Cast(b.col11 as numeric),0))/sum(coalesce(Cast(b.col5 as numeric),0))  jcwc3,
+            sum(coalesce(Cast(b.col12 as numeric),0))/sum(coalesce(Cast(b.col5 as numeric),0))  jcwc4,
+            sum(coalesce(Cast(b.col13 as numeric),0))/sum(coalesce(Cast(b.col5 as numeric),0))  jcwc5,
+            sum(coalesce(Cast(b.col14 as numeric),0))/sum(coalesce(Cast(b.col5 as numeric),0))  jcwc6,
+            sum(coalesce(Cast(b.col15 as numeric),0))/sum(coalesce(Cast(b.col5 as numeric),0))  jcwc7,
+            sum(coalesce(Cast(b.col16 as numeric),0))/sum(coalesce(Cast(b.col5 as numeric),0))  jcwc8,
+            sum(coalesce(Cast(b.col17 as numeric),0))/sum(coalesce(Cast(b.col5 as numeric),0))  jcwc9,
+            sum(coalesce(Cast(b.col18 as numeric),0))/sum(coalesce(Cast(b.col5 as numeric),0))  jcwc10,
+            sum(coalesce(Cast(b.col19 as numeric),0))/sum(coalesce(Cast(b.col5 as numeric),0))  jcwc11,
+            sum(coalesce(Cast(b.col20 as numeric),0))/sum(coalesce(Cast(b.col5 as numeric),0))  jcwc12
+
+
+        from ly_sys_总体收入 a
+                 left join ly_sys_支局指标 b  on a.col1=b.col1 and b.time_if_delete is null
+        where a.time_if_delete is null
+        <if test='zhiju!=null'>
+             and a.col1 = '${zhiju}'
+        </if>
+    </select>
+
+    <select id="getManagerProductTubiaoInfo" resultType="java.util.Map">
+        select
+
+            sum(coalesce(Cast(col2 as numeric),0))  ty1,
+            sum(coalesce(Cast(col3 as numeric),0))  ty2,
+            sum(coalesce(Cast(col4 as numeric),0))  ty3,
+            sum(coalesce(Cast(col5 as numeric),0))  ty4,
+            sum(coalesce(Cast(col6 as numeric),0))  ty5,
+            sum(coalesce(Cast(col7 as numeric),0))  ty6,
+            sum(coalesce(Cast(col8 as numeric),0))  ty7,
+            sum(coalesce(Cast(col9 as numeric),0))  ty8,
+            sum(coalesce(Cast(col10 as numeric),0))  ty9,
+            sum(coalesce(Cast(col11 as numeric),0))  ty10,
+            sum(coalesce(Cast(col12 as numeric),0))  ty11,
+            sum(coalesce(Cast(col13 as numeric),0))  ty12,
+
+            0/sum(coalesce(Cast(col2 as numeric),1))  tyhb1,
+            sum(coalesce(Cast(col3 as numeric),0))/sum(coalesce(Cast(col2 as numeric),1))  tyhb2,
+            sum(coalesce(Cast(col4 as numeric),0))/sum(coalesce(Cast(col3 as numeric),1))  tyhb3,
+            sum(coalesce(Cast(col5 as numeric),0))/sum(coalesce(Cast(col4 as numeric),1))  tyhb4,
+            sum(coalesce(Cast(col6 as numeric),0))/sum(coalesce(Cast(col5 as numeric),1))  tyhb5,
+            sum(coalesce(Cast(col7 as numeric),0))/sum(coalesce(Cast(col6 as numeric),1))  tyhb6,
+            sum(coalesce(Cast(col8 as numeric),0))/sum(coalesce(Cast(col7 as numeric),1))  tyhb7,
+            sum(coalesce(Cast(col9 as numeric),0))/sum(coalesce(Cast(col8 as numeric),1))  tyhb8,
+            sum(coalesce(Cast(col10 as numeric),0))/sum(coalesce(Cast(col9 as numeric),1))  tyhb9,
+            sum(coalesce(Cast(col11 as numeric),0))/sum(coalesce(Cast(col10 as numeric),1))  tyhb10,
+            sum(coalesce(Cast(col12 as numeric),0))/sum(coalesce(Cast(col11 as numeric),1))  tyhb11,
+            sum(coalesce(Cast(col13 as numeric),0))/sum(coalesce(Cast(col12 as numeric),1))  tyhb12,
+
+            sum(coalesce(Cast(col14 as numeric),0))  kd1,
+            sum(coalesce(Cast(col15 as numeric),0))  kd2,
+            sum(coalesce(Cast(col16 as numeric),0))  kd3,
+            sum(coalesce(Cast(col17 as numeric),0))  kd4,
+            sum(coalesce(Cast(col18 as numeric),0))  kd5,
+            sum(coalesce(Cast(col19 as numeric),0))  kd6,
+            sum(coalesce(Cast(col20 as numeric),0))  kd7,
+            sum(coalesce(Cast(col21 as numeric),0))  kd8,
+            sum(coalesce(Cast(col22 as numeric),0))  kd9,
+            sum(coalesce(Cast(col23 as numeric),0))  kd10,
+            sum(coalesce(Cast(col24 as numeric),0))  kd11,
+            sum(coalesce(Cast(col25 as numeric),0))  kd12,
+
+            0/sum(coalesce(Cast(col14 as numeric),1))  kdhb1,
+            sum(coalesce(Cast(col15 as numeric),0))/sum(coalesce(Cast(col14 as numeric),1))  kdhb2,
+            sum(coalesce(Cast(col16 as numeric),0))/sum(coalesce(Cast(col15 as numeric),1))  kdhb3,
+            sum(coalesce(Cast(col17 as numeric),0))/sum(coalesce(Cast(col16 as numeric),1))  kdhb4,
+            sum(coalesce(Cast(col18 as numeric),0))/sum(coalesce(Cast(col17 as numeric),1))  kdhb5,
+            sum(coalesce(Cast(col19 as numeric),0))/sum(coalesce(Cast(col18 as numeric),1))  kdhb6,
+            sum(coalesce(Cast(col20 as numeric),0))/sum(coalesce(Cast(col19 as numeric),1))  kdhb7,
+            sum(coalesce(Cast(col21 as numeric),0))/sum(coalesce(Cast(col20 as numeric),1))  kdhb8,
+            sum(coalesce(Cast(col22 as numeric),0))/sum(coalesce(Cast(col21 as numeric),1))  kdhb9,
+            sum(coalesce(Cast(col23 as numeric),0))/sum(coalesce(Cast(col22 as numeric),1))  kdhb10,
+            sum(coalesce(Cast(col24 as numeric),0))/sum(coalesce(Cast(col23 as numeric),1))  kdhb11,
+            sum(coalesce(Cast(col25 as numeric),0))/sum(coalesce(Cast(col24 as numeric),1))  kdhb12,
+
+            sum(coalesce(Cast(col38 as numeric),0))  zx1,
+            sum(coalesce(Cast(col39 as numeric),0))  zx2,
+            sum(coalesce(Cast(col40 as numeric),0))  zx3,
+            sum(coalesce(Cast(col41 as numeric),0))  zx4,
+            sum(coalesce(Cast(col42 as numeric),0))  zx5,
+            sum(coalesce(Cast(col43 as numeric),0))  zx6,
+            sum(coalesce(Cast(col44 as numeric),0))  zx7,
+            sum(coalesce(Cast(col45 as numeric),0))  zx8,
+            sum(coalesce(Cast(col46 as numeric),0))  zx9,
+            sum(coalesce(Cast(col47 as numeric),0))  zx10,
+            sum(coalesce(Cast(col48 as numeric),0))  zx11,
+            sum(coalesce(Cast(col49 as numeric),0))  zx12,
+
+            0/sum(coalesce(Cast(col38 as numeric),1))  zxhb1,
+            sum(coalesce(Cast(col39 as numeric),0))/sum(coalesce(Cast(col38 as numeric),1))  zxhb2,
+            sum(coalesce(Cast(col40 as numeric),0))/sum(coalesce(Cast(col39 as numeric),1))  zxhb3,
+            sum(coalesce(Cast(col41 as numeric),0))/sum(coalesce(Cast(col40 as numeric),1))  zxhb4,
+            sum(coalesce(Cast(col42 as numeric),0))/sum(coalesce(Cast(col41 as numeric),1))  zxhb5,
+            sum(coalesce(Cast(col43 as numeric),0))/sum(coalesce(Cast(col42 as numeric),1))  zxhb6,
+            sum(coalesce(Cast(col44 as numeric),0))/sum(coalesce(Cast(col43 as numeric),1))  zxhb7,
+            sum(coalesce(Cast(col45 as numeric),0))/sum(coalesce(Cast(col44 as numeric),1))  zxhb8,
+            sum(coalesce(Cast(col46 as numeric),0))/sum(coalesce(Cast(col45 as numeric),1))  zxhb9,
+            sum(coalesce(Cast(col47 as numeric),0))/sum(coalesce(Cast(col46 as numeric),1))  zxhb10,
+            sum(coalesce(Cast(col48 as numeric),0))/sum(coalesce(Cast(col47 as numeric),1))  zxhb11,
+            sum(coalesce(Cast(col49 as numeric),0))/sum(coalesce(Cast(col48 as numeric),1))  zxhb12
+
+        from ly_sys_产品收入
+
+        where time_if_delete is null
+        <if test='zhiju!=null '>
+            and col1 = '${zhiju}'
+        </if>
+    </select>
+
+    <select id="getKehuTubiaoInfo" resultType="java.util.Map">
+        select
+
+            sum(coalesce(Cast(col39 as numeric),0))  sr1,
+            sum(coalesce(Cast(col47 as numeric),0))  sr2,
+            sum(coalesce(Cast(col55 as numeric),0))  sr3,
+            sum(coalesce(Cast(col63 as numeric),0))  sr4,
+            sum(coalesce(Cast(col71 as numeric),0))  sr5,
+            sum(coalesce(Cast(col79 as numeric),0))  sr6,
+            sum(coalesce(Cast(col87 as numeric),0))  sr7,
+            sum(coalesce(Cast(col95 as numeric),0))  sr8,
+            sum(coalesce(Cast(col103 as numeric),0))  sr9,
+            sum(coalesce(Cast(col111 as numeric),0))  sr10,
+            sum(coalesce(Cast(col119 as numeric),0))  sr11,
+            sum(coalesce(Cast(col127 as numeric),0))  sr12,
+
+            sum(coalesce(Cast(col39 as numeric),0))/sum(coalesce(Cast(col11 as numeric),0))  zsrtb1,
+            sum(coalesce(Cast(col47 as numeric),0))/sum(coalesce(Cast(col12 as numeric),0))  zsrtb2,
+            sum(coalesce(Cast(col55 as numeric),0))/sum(coalesce(Cast(col13 as numeric),0))  zsrtb3,
+            sum(coalesce(Cast(col63 as numeric),0))/sum(coalesce(Cast(col14 as numeric),0))  zsrtb4,
+            sum(coalesce(Cast(col71 as numeric),0))/sum(coalesce(Cast(col15 as numeric),0))  zsrtb5,
+            sum(coalesce(Cast(col79 as numeric),0))/sum(coalesce(Cast(col16 as numeric),0))  zsrtb6,
+            sum(coalesce(Cast(col87 as numeric),0))/sum(coalesce(Cast(col17 as numeric),0))  zsrtb7,
+            sum(coalesce(Cast(col95 as numeric),0))/sum(coalesce(Cast(col18 as numeric),0))  zsrtb8,
+            sum(coalesce(Cast(col103 as numeric),0))/sum(coalesce(Cast(col19 as numeric),0))  zsrtb9,
+            sum(coalesce(Cast(col111 as numeric),0))/sum(coalesce(Cast(col20 as numeric),0))  zsrtb10,
+            sum(coalesce(Cast(col119 as numeric),0))/sum(coalesce(Cast(col21 as numeric),0))  zsrtb11,
+            sum(coalesce(Cast(col127 as numeric),0))/sum(coalesce(Cast(col22 as numeric),0))  zsrtb12,
+
+            sum(coalesce(Cast(col39 as numeric),0))/sum(coalesce(Cast(col22 as numeric),1))  zsrhb1,
+            sum(coalesce(Cast(col47 as numeric),0))/sum(coalesce(Cast(col39 as numeric),1))  zsrhb2,
+            sum(coalesce(Cast(col55 as numeric),0))/sum(coalesce(Cast(col47 as numeric),1))  zsrhb3,
+            sum(coalesce(Cast(col63 as numeric),0))/sum(coalesce(Cast(col55 as numeric),1))  zsrhb4,
+            sum(coalesce(Cast(col71 as numeric),0))/sum(coalesce(Cast(col63 as numeric),1))  zsrhb5,
+            sum(coalesce(Cast(col79 as numeric),0))/sum(coalesce(Cast(col71 as numeric),1))  zsrhb6,
+            sum(coalesce(Cast(col87 as numeric),0))/sum(coalesce(Cast(col79 as numeric),1))  zsrhb7,
+            sum(coalesce(Cast(col95 as numeric),0))/sum(coalesce(Cast(col87 as numeric),1))  zsrhb8,
+            sum(coalesce(Cast(col103 as numeric),0))/sum(coalesce(Cast(col95 as numeric),1))  zsrhb9,
+            sum(coalesce(Cast(col111 as numeric),0))/sum(coalesce(Cast(col103 as numeric),1))  zsrhb10,
+            sum(coalesce(Cast(col119 as numeric),0))/sum(coalesce(Cast(col111 as numeric),1))  zsrhb11,
+            sum(coalesce(Cast(col127 as numeric),0))/sum(coalesce(Cast(col119 as numeric),1))  zsrhb12,
+
+
+
+            sum(coalesce(Cast(col45 as numeric),0))  ty1,
+            sum(coalesce(Cast(col53 as numeric),0))  ty2,
+            sum(coalesce(Cast(col61 as numeric),0))  ty3,
+            sum(coalesce(Cast(col69 as numeric),0))  ty4,
+            sum(coalesce(Cast(col77 as numeric),0))  ty5,
+            sum(coalesce(Cast(col85 as numeric),0))  ty6,
+            sum(coalesce(Cast(col93 as numeric),0))  ty7,
+            sum(coalesce(Cast(col101 as numeric),0))  ty8,
+            sum(coalesce(Cast(col109 as numeric),0))  ty9,
+            sum(coalesce(Cast(col117 as numeric),0))  ty10,
+            sum(coalesce(Cast(col125 as numeric),0))  ty11,
+            sum(coalesce(Cast(col133 as numeric),0))  ty12,
+
+            0/sum(coalesce(Cast(col45 as numeric),1))  tyhb1,
+            sum(coalesce(Cast(col53 as numeric),0))/sum(coalesce(Cast(col45 as numeric),1))  tyhb2,
+            sum(coalesce(Cast(col61 as numeric),0))/sum(coalesce(Cast(col53 as numeric),1))  tyhb3,
+            sum(coalesce(Cast(col69 as numeric),0))/sum(coalesce(Cast(col61 as numeric),1))  tyhb4,
+            sum(coalesce(Cast(col77 as numeric),0))/sum(coalesce(Cast(col69 as numeric),1))  tyhb5,
+            sum(coalesce(Cast(col85 as numeric),0))/sum(coalesce(Cast(col77 as numeric),1))  tyhb6,
+            sum(coalesce(Cast(col93 as numeric),0))/sum(coalesce(Cast(col85 as numeric),1))  tyhb7,
+            sum(coalesce(Cast(col101 as numeric),0))/sum(coalesce(Cast(col93 as numeric),1))  tyhb8,
+            sum(coalesce(Cast(col109 as numeric),0))/sum(coalesce(Cast(col101 as numeric),1))  tyhb9,
+            sum(coalesce(Cast(col117 as numeric),0))/sum(coalesce(Cast(col109 as numeric),1))  tyhb10,
+            sum(coalesce(Cast(col125 as numeric),0))/sum(coalesce(Cast(col117 as numeric),1))  tyhb11,
+            sum(coalesce(Cast(col133 as numeric),0))/sum(coalesce(Cast(col125 as numeric),1))  tyhb12,
+
+            sum(coalesce(Cast(col46 as numeric),0))  zx1,
+            sum(coalesce(Cast(col54 as numeric),0))  zx2,
+            sum(coalesce(Cast(col62 as numeric),0))  zx3,
+            sum(coalesce(Cast(col70 as numeric),0))  zx4,
+            sum(coalesce(Cast(col78 as numeric),0))  zx5,
+            sum(coalesce(Cast(col86 as numeric),0))  zx6,
+            sum(coalesce(Cast(col94 as numeric),0))  zx7,
+            sum(coalesce(Cast(col102 as numeric),0))  zx8,
+            sum(coalesce(Cast(col110 as numeric),0))  zx9,
+            sum(coalesce(Cast(col118 as numeric),0))  zx10,
+            sum(coalesce(Cast(col126 as numeric),0))  zx11,
+            sum(coalesce(Cast(col134 as numeric),0))  zx12,
+
+            0/sum(coalesce(Cast(col46 as numeric),1))  zxhb1,
+            sum(coalesce(Cast(col54 as numeric),0))/sum(coalesce(Cast(col46 as numeric),1))  zxhb2,
+            sum(coalesce(Cast(col62 as numeric),0))/sum(coalesce(Cast(col54 as numeric),1))  zxhb3,
+            sum(coalesce(Cast(col70 as numeric),0))/sum(coalesce(Cast(col62 as numeric),1))  zxhb4,
+            sum(coalesce(Cast(col78 as numeric),0))/sum(coalesce(Cast(col70 as numeric),1))  zxhb5,
+            sum(coalesce(Cast(col86 as numeric),0))/sum(coalesce(Cast(col78 as numeric),1))  zxhb6,
+            sum(coalesce(Cast(col94 as numeric),0))/sum(coalesce(Cast(col86 as numeric),1))  zxhb7,
+            sum(coalesce(Cast(col102 as numeric),0))/sum(coalesce(Cast(col94 as numeric),1))  zxhb8,
+            sum(coalesce(Cast(col110 as numeric),0))/sum(coalesce(Cast(col102 as numeric),1))  zxhb9,
+            sum(coalesce(Cast(col118 as numeric),0))/sum(coalesce(Cast(col110 as numeric),1))  zxhb10,
+            sum(coalesce(Cast(col126 as numeric),0))/sum(coalesce(Cast(col118 as numeric),1))  zxhb11,
+            sum(coalesce(Cast(col134 as numeric),0))/sum(coalesce(Cast(col126 as numeric),1))  zxhb12
+
+        from ly_sys_清单级收入
+
+        where time_if_delete is null  and col4 = '${kehuName}'
+
+    </select>
+</mapper>
